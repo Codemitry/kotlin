@@ -1,14 +1,15 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.refactoring.fqName.fqName
 import org.jetbrains.kotlin.lexer.KtTokens.DATA_KEYWORD
 import org.jetbrains.kotlin.lexer.KtTokens.EXPECT_KEYWORD
-import org.jetbrains.kotlin.mppconverter.copyConstructorPropertiesToBody
-import org.jetbrains.kotlin.mppconverter.deleteDelegationAndBody
-import org.jetbrains.kotlin.mppconverter.replaceConstructorPropertiesWithParameters
+import org.jetbrains.kotlin.mppconverter.createKtParameterFromProperty
+import org.jetbrains.kotlin.mppconverter.createKtPropertyWithoutInitializer
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.isPropertyParameter
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 
@@ -22,7 +23,8 @@ class KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
         }
 
         if (property.hasInitializer()) {
-            // type is not shown explicitly
+
+            // if type is not shown explicitly
             if (property.typeReference == null) {
                 val factory = KtPsiFactory(property)
                 val type =
@@ -76,7 +78,7 @@ class KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
         if (klass.isData()) klass.removeModifier(DATA_KEYWORD)
 
         klass.copyConstructorPropertiesToBody()
-        klass.replaceConstructorPropertiesWithParameters()
+        klass.primaryConstructor?.replacePropertiesWithParameters()
         klass.secondaryConstructors.forEach {
             it.deleteDelegationAndBody()
         }
@@ -88,4 +90,34 @@ class KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
         // TODO: remove supertype initializer
         // TODO: remove delegation implementation
     }
+
+    // KtClass
+    private fun KtPrimaryConstructor.replacePropertiesWithParameters() {
+        this.valueParameters.forEach { param ->
+            param.replace(createKtParameterFromProperty(param))
+        }
+    }
+
+    private fun KtSecondaryConstructor.deleteDelegationAndBody() {
+        this.getDelegationCallOrNull()?.delete()
+        this.bodyBlockExpression?.delete()
+        this.colon?.delete()
+    }
+
+    private fun KtClass.copyConstructorPropertiesToBody() {
+        primaryConstructorParameters.forEach { param ->
+
+            if (param.isPropertyParameter()) {
+                getOrCreateBody().apply {
+                    addInside(createKtPropertyWithoutInitializer(param))
+                }
+            }
+        }
+    }
+
+    private fun KtClassBody.addInside(element: PsiElement) {
+        addAfter(element, lBrace)
+        addAfter(KtPsiFactory(element).createNewLine(), lBrace)
+    }
+
 }

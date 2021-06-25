@@ -14,7 +14,6 @@ import org.jetbrains.kotlin.idea.util.ifTrue
 import org.jetbrains.kotlin.idea.util.projectStructure.allModules
 import org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.isPropertyParameter
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.bindingContextUtil.getAbbreviatedTypeOrType
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
@@ -23,17 +22,6 @@ import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.typeUtil.containsError
 
-
-fun KtClassBody.addInside(element: PsiElement) {
-    addAfter(element, lBrace)
-    addAfter(KtPsiFactory(element).createNewLine(), lBrace)
-}
-
-fun KtSecondaryConstructor.deleteDelegationAndBody() {
-    this.getDelegationCallOrNull()?.delete()
-    this.bodyBlockExpression?.delete()
-    this.colon?.delete()
-}
 
 fun createKtParameterFromProperty(paramProperty: KtParameter): KtParameter {
     val factory = KtPsiFactory(paramProperty)
@@ -69,26 +57,6 @@ fun KtParameter.removeInitializer() {
     defaultValue?.delete()
     equalsToken?.delete()
 }
-
-
-fun KtClass.replaceConstructorPropertiesWithParameters() {
-    primaryConstructorParameters.forEach { param ->
-        param.replace(createKtParameterFromProperty(param))
-    }
-}
-
-
-fun KtClass.copyConstructorPropertiesToBody() {
-    primaryConstructorParameters.forEach { param ->
-
-        if (param.isPropertyParameter()) {
-            getOrCreateBody().apply {
-                addInside(createKtPropertyWithoutInitializer(param))
-            }
-        }
-    }
-}
-
 
 fun PsiElement.canConvertToCommon(context: BindingContext? = null): Boolean {
     when (this) {
