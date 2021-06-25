@@ -1,5 +1,8 @@
 package org.jetbrains.kotlin.mppconverter
 
+import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.mppconverter.visitor.KtActualMakerVisitorVoid
+import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid
 import org.jetbrains.kotlin.psi.KtFile
 import java.io.File
 
@@ -49,6 +52,38 @@ class MppFileConverter(private val ktFile: KtFile) {
             it.createNewFile()
             it.writeText(this.text)
         }
+    }
+
+
+    private fun PsiElement.toExpect(): PsiElement {
+        when (this) {
+            is KtFile -> {
+                this.clearJvmDependentImports()
+                declarations.filter { it.isJvmDependent() }.forEach { it.toExpect() }
+            }
+            else -> accept(KtExpectMakerVisitorVoid())
+        }
+        return this
+    }
+
+
+    private fun PsiElement.toActual(): PsiElement {
+        when (this) {
+            is KtFile -> {
+                for (declaration in declarations) {
+                    if (declaration.isJvmDependent()) {
+                        declaration.toActual()
+                    } else {
+                        declaration.delete()
+                    }
+                }
+            }
+            else -> {
+                accept(KtActualMakerVisitorVoid())
+            }
+        }
+
+        return this
     }
 
 }

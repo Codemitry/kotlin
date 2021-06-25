@@ -13,7 +13,7 @@ import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 
 
-class KtRealizationEraserVisitorVoid : KtTreeVisitorVoid() {
+class KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
     override fun visitProperty(property: KtProperty) {
         super.visitProperty(property)
 

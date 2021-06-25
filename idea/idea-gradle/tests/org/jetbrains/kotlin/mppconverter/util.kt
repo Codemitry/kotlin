@@ -13,8 +13,6 @@ import org.jetbrains.kotlin.idea.search.usagesSearch.descriptor
 import org.jetbrains.kotlin.idea.util.ifTrue
 import org.jetbrains.kotlin.idea.util.projectStructure.allModules
 import org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD
-import org.jetbrains.kotlin.mppconverter.visitor.KtActualMakerVisitorVoid
-import org.jetbrains.kotlin.mppconverter.visitor.KtRealizationEraserVisitorVoid
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.isPropertyParameter
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -91,38 +89,6 @@ fun KtClass.copyConstructorPropertiesToBody() {
     }
 }
 
-
-
-fun PsiElement.toExpect(): PsiElement {
-    when (this) {
-        is KtFile -> {
-            this.clearJvmDependentImports()
-            declarations.filter { it.isJvmDependent() }.forEach { it.toExpect() }
-        }
-        else -> accept(KtRealizationEraserVisitorVoid())
-    }
-    return this
-}
-
-
-fun PsiElement.toActual(): PsiElement {
-    when (this) {
-        is KtFile -> {
-            for (declaration in declarations) {
-                if (declaration.isJvmDependent()) {
-                    declaration.toActual()
-                } else {
-                    declaration.delete()
-                }
-            }
-        }
-        else -> {
-            accept(KtActualMakerVisitorVoid())
-        }
-    }
-
-    return this
-}
 
 fun PsiElement.canConvertToCommon(context: BindingContext? = null): Boolean {
     when (this) {
