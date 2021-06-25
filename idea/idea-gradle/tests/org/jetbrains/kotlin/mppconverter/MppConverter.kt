@@ -7,17 +7,14 @@ package org.jetbrains.kotlin.mppconverter
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
-import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import org.gradle.tooling.GradleConnectionException
-import org.gradle.tooling.GradleConnector
-import org.gradle.tooling.ResultHandler
 import org.jetbrains.kotlin.idea.codeInsight.gradle.MultiplePluginVersionGradleImportingTestCase
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.debugger.readAction
+import org.jetbrains.kotlin.mppconverter.gradle.BuildGradleFileForMultiplatformProjectConfigurator
+import org.jetbrains.kotlin.mppconverter.gradle.GradleProjectHelper
 import org.jetbrains.kotlin.psi.KtFile
 import org.junit.Test
-import java.io.ByteArrayOutputStream
 import java.io.File
 
 // наследование только для того, чтобы application у ApplicationManager был не null
@@ -28,15 +25,40 @@ class MppConverter : MultiplePluginVersionGradleImportingTestCase() {
 
         assertJvmProjectStructure()
 
-        loadConfigurationDependencies { dependencies ->
-            this.dependencies = dependencies
-            setupProject()
+        GradleProjectHelper(jvmProjectDirectory).apply {
+            connectToProject()
+
+            loadDependencies { dependencies ->
+                this@MppConverter.dependencies = dependencies
+
+                ApplicationManager.getApplication().invokeLater {
+                    ApplicationManager.getApplication().readAction {
+                        setupProject()
+
+                        WriteCommandAction.runWriteCommandAction(project) {
+                            processFiles()
+                        }
+
+                    }
+                }
+            }
+
+            closeConnection()
         }
+
     }
+
+    /*
+    way to create ktfile in runtime:
+    val file = File("C:\\Users\\Codemitry\\Desktop\\test_mpp\\src\\jvmMain\\kotlin\\din\\Din.kt");
+    val text = configureKotlinVersionAndProperties(FileUtil.loadFile(file, true));
+    val vf = createProjectSubFile(file.path.substringAfter(testDataDirectory().path + File.separator), text);
+    vf.putUserData(VfsTestUtil.TEST_DATA_FILE_PATH, file.absolutePath); val kt = (vf.toPsiFile(project) as KtFile);
+    kt.createTempCopy(file.readText())
+     */
 
 
     var jvmProjectDirectory: String = "W:\\Kotlin\\Projects\\du"
-
 
     lateinit var jvmFiles: List<VirtualFile>
 
@@ -44,9 +66,6 @@ class MppConverter : MultiplePluginVersionGradleImportingTestCase() {
     var multiplatformProjectDirectory: String = "C:\\Users\\Codemitry\\Desktop\\${File(jvmProjectDirectory).name}_mpp"
     var repositories: List<String>? = listOf("{{kts_kotlin_plugin_repositories}}")
     var dependencies: List<String>? = null
-
-    lateinit var mppProject: Project
-        private set
 
 
     private fun createStructure() {
@@ -56,7 +75,18 @@ class MppConverter : MultiplePluginVersionGradleImportingTestCase() {
 
         val buildGradle = File(multiplatformProjectDirectory, "build.gradle.kts").apply {
             createNewFile()
-            writeText(generateBuildGradleText(repositories, dependencies))
+
+            val buildGradleBuilder = BuildGradleFileForMultiplatformProjectConfigurator.Builder()
+            repositories?.let { buildGradleBuilder.repositories(it) }
+            dependencies?.let {
+                buildGradleBuilder.commonMainDependencies(it.map { dependency ->
+                    BuildGradleFileForMultiplatformProjectConfigurator.Dependency(dependency, "implementation")
+                })
+            }
+
+            writeText(
+                buildGradleBuilder.build().text
+            )
         }
 
         val commonMain = File(src, "commonMain").apply { mkdir() }
@@ -72,47 +102,37 @@ class MppConverter : MultiplePluginVersionGradleImportingTestCase() {
     private fun setupProject() {
         createStructure()
 
-        ApplicationManager.getApplication().invokeLater {
-            ApplicationManager.getApplication().readAction {
-
-                File(jvmProjectDirectory, "src/main/kotlin").walkTopDown().filter { it.extension == "kt" }.toList().forEach { curJvmFile ->
-                    File(multiplatformProjectDirectory, "src/commonMain/kotlin/__jvm/${curJvmFile.name}").apply {
-                        createNewFile()
-                        // delete all '\r' because in intellij idea's guide said that strings delimiters are only '\n'
-                        writeText(curJvmFile.readText().replace("\r", ""))
-                    }
-                }
-                
-//              setup mpp project
-                mppProject = myTestFixture.project
-                jvmFiles = importProjectFromTestData().filter { it.extension == "kt" && it.parent.name == "__jvm" }
-
-                processFiles()
-
+        File(jvmProjectDirectory, "src/main/kotlin").walkTopDown().filter { it.extension == "kt" }.toList().forEach { curJvmFile ->
+            File(multiplatformProjectDirectory, "src/commonMain/kotlin/__jvm/${curJvmFile.name}").apply {
+                createNewFile()
+                // delete all '\r' because in intellij idea's guide said that strings delimiters are only '\n'
+                writeText(curJvmFile.readText().replace("\r", ""))
             }
+
+//              setup mpp project
+            jvmFiles = importProjectFromTestData().filter { it.extension == "kt" && it.parent.name == "__jvm" }
+
         }
     }
 
 
     private fun processFiles() {
-        WriteCommandAction.runWriteCommandAction(mppProject) {
+        jvmFiles.forEach { jvmFile ->
+            val ktFile = jvmFile.toPsiFile(project) as KtFile
 
-            jvmFiles.forEach { jvmFile ->
-                val ktFile = jvmFile.toPsiFile(mppProject) as KtFile
-
-                val converter = MppFileConverter(ktFile)
-                converter.convert(
-                    "${multiplatformProjectDirectory}/src/commonMain/kotlin/",
-                    "${multiplatformProjectDirectory}/src/jvmMain/kotlin/"
-                )
-                File("${multiplatformProjectDirectory}/src/commonMain/kotlin/__jvm", jvmFile.name).delete()
-            }
-            File("${multiplatformProjectDirectory}/src/commonMain/kotlin/__jvm").delete()
+            val converter = MppFileConverter(ktFile)
+            converter.convert(
+                "${multiplatformProjectDirectory}/src/commonMain/kotlin/",
+                "${multiplatformProjectDirectory}/src/jvmMain/kotlin/"
+            )
+            File("${multiplatformProjectDirectory}/src/commonMain/kotlin/__jvm", jvmFile.name).delete()
         }
+        File("${multiplatformProjectDirectory}/src/commonMain/kotlin/__jvm").delete()
     }
 
 
     private fun assertJvmProjectStructure() {
+        // TODO migrate check to Gradle Tooling API
         val root = File(jvmProjectDirectory)
         if (!root.exists()) throw IllegalArgumentException("Project directory does not exist")
 
@@ -130,102 +150,9 @@ class MppConverter : MultiplePluginVersionGradleImportingTestCase() {
     }
 
 
-    private fun rawDependenciesToList(lines: List<String>): List<String> {
-        val dependencies = mutableListOf<String>()
-
-        val firstDepLineIdx = lines.indexOfFirst { it.startsWith("implementation") } + 1
-
-        if (lines[firstDepLineIdx].contains("No dependencies", true)) return dependencies
-
-        var lineIdx = firstDepLineIdx
-        while (!lines[lineIdx].startsWith("\\---")) {
-            if (lines[lineIdx].startsWith("+---"))
-                dependencies.add(lines[lineIdx].substringAfter("+--- ").split(" ")[0])
-            lineIdx++
-        }
-        dependencies.add(lines[lineIdx].substringAfter("\\--- ").split(" ")[0])
-
-        return dependencies
-    }
-
-    private fun loadConfigurationDependencies(onDependenciesLoaded: (List<String>) -> Unit) {
-        val connector = GradleConnector.newConnector()
-
-        connector.forProjectDirectory(File(jvmProjectDirectory))
-        val connection = connector.connect()
-
-        val build = connection.newBuild()
-
-        val outputStream = ByteArrayOutputStream()
-        build.setStandardOutput(outputStream)
-
-        build.withArguments("dependencies", "--configuration", "implementation")
-        build.run(object : ResultHandler<Void> {
-            override fun onComplete(p0: Void?) {
-                val lines = outputStream.toString("UTF-8").lines()
-                onDependenciesLoaded(rawDependenciesToList(lines))
-
-            }
-
-            override fun onFailure(e: GradleConnectionException?) {
-                println("failure on get dependencies for project: $e")
-
-            }
-        })
-        connection.close()
-    }
-
-
     // dir with project
     // required by TestCase
     override fun testDataDirectory(): File {
         return File(multiplatformProjectDirectory)
     }
-}
-
-
-fun generateBuildGradleText(
-    repositories: List<String>? = null,
-    dependencies: List<String>? = null,
-    groupId: String? = null,
-    version: String? = null,
-): String {
-    return """
-plugins {
-    kotlin("multiplatform") version "1.5.10"
-}
-${if (groupId != null) "group = \"${groupId}\"" else ""}
-${if (version != null) "version = \"${version}\"" else ""}
-
-repositories {
-${repositories?.joinToString(System.lineSeparator()) { "\t$it" } ?: ""}
-}
-
-kotlin {
-    jvm {
-        compilations.all {
-            kotlinOptions.jvmTarget = "1.8"
-        }
-        testRuns["test"].executionTask.configure {
-            useJUnit()
-        }
-    }
-    sourceSets {
-        val commonMain by getting {
-            dependencies {
-${dependencies?.joinToString(System.lineSeparator()) { "\t\t\t\timplementation(\"${it}\")" } ?: ""}
-            }
-        }
-        val commonTest by getting {
-        }
-        val jvmMain by getting {}
-        val jvmTest by getting {
-            dependencies {
-// implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
-            }
-        }
-    }
-}
-
-    """.trimIndent()
 }

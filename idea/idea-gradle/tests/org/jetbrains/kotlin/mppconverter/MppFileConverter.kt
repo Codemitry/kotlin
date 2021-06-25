@@ -1,13 +1,9 @@
 package org.jetbrains.kotlin.mppconverter
 
-import org.jetbrains.kotlin.idea.caches.resolve.analyze
-import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
 import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.resolve.BindingContext
 import java.io.File
 
 class MppFileConverter(private val ktFile: KtFile) {
-    private var context: BindingContext = ktFile.analyze()
 
     fun convert(commonSources: String, jvmSources: String) {
         val commonSourcesDir = File(commonSources)
@@ -18,11 +14,10 @@ class MppFileConverter(private val ktFile: KtFile) {
 
         if (ktFile.isJvmDependent()) {
             if (ktFile.canConvertToCommon()) {
-                val commonFile = makeCommonTargetFile()
-                commonFile.clearJvmDependentImports()
+                val commonFile = ktFile.makeCommonTargetFile()
                 commonFile.createDirsAndWriteFile("${commonSources}/${commonFile.packageToRelativePath()}")
 
-                val jvmFile = makeJvmTargetFile()
+                val jvmFile = ktFile.makeJvmTargetFile()
                 jvmFile.createDirsAndWriteFile("${jvmSources}/${jvmFile.packageToRelativePath()}")
             } else {
                 ktFile.createDirsAndWriteFile("${jvmSources}/${ktFile.packageToRelativePath()}")
@@ -32,21 +27,12 @@ class MppFileConverter(private val ktFile: KtFile) {
         }
     }
 
-    private fun makeCommonTargetFile(): KtFile {
-        val copy = ktFile.copy() as KtFile
-        context = copy.analyzeWithContent()
-        copy.toExpect()
-        return copy
+    private fun KtFile.makeCommonTargetFile(): KtFile = (this.copy() as KtFile).apply {
+        toExpect()
     }
 
-
-    private fun makeJvmTargetFile(): KtFile {
-        val copy = ktFile.copy() as KtFile
-        context = copy.analyzeWithContent()
-        copy.toActual()
-
-        return copy
-
+    private fun KtFile.makeJvmTargetFile(): KtFile = (this.copy() as KtFile).apply {
+        toActual()
     }
 
 

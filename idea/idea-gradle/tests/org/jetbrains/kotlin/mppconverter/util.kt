@@ -1,16 +1,17 @@
 package org.jetbrains.kotlin.mppconverter
 
+import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.idea.caches.project.toDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.core.targetDescriptors
-import org.jetbrains.kotlin.idea.debugger.sequence.psi.resolveType
-import org.jetbrains.kotlin.idea.kdoc.isBoringBuiltinClass
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.getReturnTypeReference
 import org.jetbrains.kotlin.idea.search.usagesSearch.descriptor
 import org.jetbrains.kotlin.idea.util.ifTrue
-import org.jetbrains.kotlin.lexer.KtTokens.LATEINIT_KEYWORD
+import org.jetbrains.kotlin.idea.util.projectStructure.allModules
 import org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD
 import org.jetbrains.kotlin.mppconverter.visitor.KtActualMakerVisitorVoid
 import org.jetbrains.kotlin.mppconverter.visitor.KtRealizationEraserVisitorVoid
@@ -24,26 +25,6 @@ import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.typeUtil.containsError
 
-
-val incompatibleWithExpectFunModifiers = listOf(
-    PRIVATE_KEYWORD, LATEINIT_KEYWORD
-)
-
-val incompatibleWithActualFunModifiers = listOf(
-    PRIVATE_KEYWORD, LATEINIT_KEYWORD
-)
-
-fun KtModifierListOwner.deleteModifiersIncompatibleWithExpect() {
-    for (modifier in incompatibleWithExpectFunModifiers) {
-        this.removeModifier(modifier)
-    }
-}
-
-fun KtModifierListOwner.deleteModifiersIncompatibleWithActual() {
-    for (modifier in incompatibleWithActualFunModifiers) {
-        this.removeModifier(modifier)
-    }
-}
 
 fun KtClassBody.addInside(element: PsiElement) {
     addAfter(element, lBrace)
@@ -115,15 +96,10 @@ fun KtClass.copyConstructorPropertiesToBody() {
 fun PsiElement.toExpect(): PsiElement {
     when (this) {
         is KtFile -> {
-            for (declaration in declarations) {
-                if (declaration.isJvmDependent()) {
-                    declaration.toExpect()
-                }
-            }
+            this.clearJvmDependentImports()
+            declarations.filter { it.isJvmDependent() }.forEach { it.toExpect() }
         }
-        else -> {
-            accept(KtRealizationEraserVisitorVoid())
-        }
+        else -> accept(KtRealizationEraserVisitorVoid())
     }
     return this
 }
@@ -210,6 +186,11 @@ fun KtFunction.signatureDependsOnJvm(): Boolean {
     return false
 }
 
+fun KtForExpression.dependsOnJvm(): Boolean {
+    this.loopRange?.getType(analyze())?.dependsOnJvm()?.ifTrue { return true }
+    return false // just mock. TODO: any different cases? Check body
+}
+
 fun KtTypeReference.dependsOnJvm(context: BindingContext? = null): Boolean {
     val context = context ?: this.analyze()
     val type = getAbbreviatedTypeOrType(context) ?: error("type of KtTypeReference is null") // if type hasn't defined, let it is jvm
@@ -226,6 +207,12 @@ fun KtParameter.dependsOnJvm(): Boolean {
 
     this.typeReference?.let { return it.dependsOnJvm() }
 
+    // type not declared explicitly
+
+    if (this.isLoopParameter && parent is KtForExpression) {
+        return (parent as KtForExpression).dependsOnJvm()
+    }
+
     val type = this.descriptor?.type ?: return true // it can't analyze because no jvm-dependencies in common target
     return type.dependsOnJvm()
 }
@@ -234,7 +221,11 @@ fun KotlinType.dependsOnJvm(): Boolean {
     if (this.isError || this.containsError()) return true // jvm types can't be analyzed in common target
     val descriptor = this.constructor.declarationDescriptor ?: error("declaration descriptor of constructor of KotlinType is null")
 
-    if (descriptor.isBoringBuiltinClass()) return false
+    // TODO: check type's parameters with .arguments
+
+    // if non-parameterized built-in type
+    if (this.arguments.isEmpty() && KotlinBuiltIns.isBuiltIn(descriptor)) return false
+
 
     return false // TODO maybe another cases?
 }
@@ -278,6 +269,10 @@ fun PsiElement.isJvmDependent(): Boolean {
             return this.dependsOnJvm()
         }
 
+        is KtForExpression -> {
+            return this.dependsOnJvm()
+        }
+
         is KtFile -> {
             return declarations.any { it.isJvmDependent() }
         }
@@ -298,23 +293,6 @@ fun PsiElement.isJvmDependent(): Boolean {
     }
 
 
-    if (this is KtParameter) {
-        return this.dependsOnJvm()
-    }
-
-    if (this is KtBinaryExpression)   { // was KtBinaryExpression
-
-        if (this.getType(analyze()) == null) return true
-        val type = resolveType()
-
-        if (type.isError || type.containsError()) return true // error when type is jvm because analyzer can't determine jvm types in common module
-
-        if (type.constructor.declarationDescriptor?.isBoringBuiltinClass() == true) return false
-        if (type.constructor.declarationDescriptor?.module?.name?.asString() == "<built-ins module>") return true
-
-    }
-
-
     return children.any { it.isJvmDependent() }
 }
 
@@ -323,5 +301,11 @@ fun KtFile.clearJvmDependentImports() {
         if (it.dependsOnJvm())
             it.delete()
     }
+}
+
+// TODO: think how provide project to util: KotlinType.dependsOnJvm()
+fun KotlinType.declaredIn(project: Project): Boolean {
+    val descriptor = constructor.declarationDescriptor ?: error("Declaration descriptor of KotlinType is null")
+    return project.allModules().map { it.toDescriptor() }.contains(descriptor.module)
 }
 

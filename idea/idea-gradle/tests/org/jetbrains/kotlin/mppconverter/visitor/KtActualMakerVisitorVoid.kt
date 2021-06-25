@@ -1,7 +1,6 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
 import org.jetbrains.kotlin.lexer.KtTokens.*
-import org.jetbrains.kotlin.mppconverter.deleteModifiersIncompatibleWithActual
 import org.jetbrains.kotlin.mppconverter.removeInitializer
 import org.jetbrains.kotlin.psi.*
 
@@ -11,7 +10,6 @@ class KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
         super.visitNamedFunction(function)
 
         function.addModifier(ACTUAL_KEYWORD)
-        function.deleteModifiersIncompatibleWithActual()
     }
 
     override fun visitProperty(property: KtProperty) {
@@ -21,7 +19,6 @@ class KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
             return
 
         property.addModifier(ACTUAL_KEYWORD)
-        property.deleteModifiersIncompatibleWithActual()
     }
 
     override fun visitPrimaryConstructor(constructor: KtPrimaryConstructor) {
@@ -40,7 +37,6 @@ class KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
             if (it.hasValOrVar()) {
                 it.addModifier(ACTUAL_KEYWORD)
             }
-            it.deleteModifiersIncompatibleWithActual()
             it.removeInitializer()
         }
 
@@ -59,6 +55,5 @@ class KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
             return
 
         klass.addModifier(ACTUAL_KEYWORD)
-        klass.deleteModifiersIncompatibleWithActual()
     }
 }
