@@ -8,17 +8,20 @@ package org.jetbrains.kotlin.mppconverter
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.idea.codeInsight.gradle.MultiplePluginVersionGradleImportingTestCase
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.debugger.readAction
 import org.jetbrains.kotlin.mppconverter.gradle.BuildGradleFileForMultiplatformProjectConfigurator
 import org.jetbrains.kotlin.mppconverter.gradle.GradleProjectHelper
+import org.jetbrains.kotlin.platform.js.JsPlatforms
+import org.jetbrains.kotlin.platform.jvm.JdkPlatform
 import org.jetbrains.kotlin.psi.KtFile
 import org.junit.Test
 import java.io.File
 
 // наследование только для того, чтобы application у ApplicationManager был не null
-class MppConverter : MultiplePluginVersionGradleImportingTestCase() {
+class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     @Test
     fun main() {
@@ -29,7 +32,7 @@ class MppConverter : MultiplePluginVersionGradleImportingTestCase() {
             connectToProject()
 
             loadDependencies { dependencies ->
-                this@MppConverter.dependencies = dependencies
+                this@MppProjectConverter.dependencies = dependencies
 
                 ApplicationManager.getApplication().invokeLater {
                     ApplicationManager.getApplication().readAction {
@@ -62,7 +65,6 @@ class MppConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     lateinit var jvmFiles: List<VirtualFile>
 
-
     var multiplatformProjectDirectory: String = "C:\\Users\\Codemitry\\Desktop\\${File(jvmProjectDirectory).name}_mpp"
     var repositories: List<String>? = listOf("{{kts_kotlin_plugin_repositories}}")
     var dependencies: List<String>? = null
@@ -79,9 +81,12 @@ class MppConverter : MultiplePluginVersionGradleImportingTestCase() {
             val buildGradleBuilder = BuildGradleFileForMultiplatformProjectConfigurator.Builder()
             repositories?.let { buildGradleBuilder.repositories(it) }
             dependencies?.let {
-                buildGradleBuilder.commonMainDependencies(it.map { dependency ->
+                val deps = it.map { dependency ->
                     BuildGradleFileForMultiplatformProjectConfigurator.Dependency(dependency, "implementation")
-                })
+                }
+
+                buildGradleBuilder.commonMainDependencies(deps)
+                buildGradleBuilder.jvmMainDependencies(deps)
             }
 
             writeText(
@@ -91,12 +96,17 @@ class MppConverter : MultiplePluginVersionGradleImportingTestCase() {
 
         val commonMain = File(src, "commonMain").apply { mkdir() }
         val jvmMain = File(src, "jvmMain").apply { mkdir() }
+        val jsMain = File(src, "jsMain").apply { mkdir() }
 
-        File(commonMain, "kotlin/__jvm").apply {
+        File(commonMain, "kotlin/__jvm").apply { mkdirs() }
+        File(jvmMain, "kotlin/__jvm").apply {
             mkdirs()
+            // create jvm temporary file to create copy and analyze with jvm analyzer
+            File(this, "tmp.kt").apply { createNewFile() }
         }
 
         File(jvmMain, "kotlin").mkdir()
+        File(jsMain, "kotlin").mkdir()
     }
 
     private fun setupProject() {
@@ -109,9 +119,9 @@ class MppConverter : MultiplePluginVersionGradleImportingTestCase() {
                 writeText(curJvmFile.readText().replace("\r", ""))
             }
 
-//              setup mpp project
-            jvmFiles = importProjectFromTestData().filter { it.extension == "kt" && it.parent.name == "__jvm" }
-
+            // setup mpp project
+            val allKtFiles = importProjectFromTestData()
+            jvmFiles = allKtFiles.filter { it.extension == "kt" && it.path.contains("commonMain/kotlin/__jvm/") }
         }
     }
 
@@ -128,6 +138,7 @@ class MppConverter : MultiplePluginVersionGradleImportingTestCase() {
             File("${multiplatformProjectDirectory}/src/commonMain/kotlin/__jvm", jvmFile.name).delete()
         }
         File("${multiplatformProjectDirectory}/src/commonMain/kotlin/__jvm").delete()
+        File("${multiplatformProjectDirectory}/src/jvmMain/kotlin/__jvm").delete()
     }
 
 

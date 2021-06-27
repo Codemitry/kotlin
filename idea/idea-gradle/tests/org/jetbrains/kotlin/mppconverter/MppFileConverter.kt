@@ -3,6 +3,7 @@ package org.jetbrains.kotlin.mppconverter
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.mppconverter.visitor.KtActualMakerVisitorVoid
 import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid
+import org.jetbrains.kotlin.mppconverter.visitor.dependsOnJvm
 import org.jetbrains.kotlin.psi.KtFile
 import java.io.File
 
@@ -15,7 +16,7 @@ class MppFileConverter(private val ktFile: KtFile) {
         if (!commonSourcesDir.isDirectory) throw IllegalArgumentException("Directory $commonSourcesDir does not exist")
         if (!jvmSourcesDir.isDirectory) throw IllegalArgumentException("Directory $jvmSourcesDir does not exist")
 
-        if (ktFile.isJvmDependent()) {
+        if (ktFile.dependsOnJvm()) {
             if (ktFile.canConvertToCommon()) {
                 val commonFile = ktFile.makeCommonTargetFile()
                 commonFile.createDirsAndWriteFile("${commonSources}/${commonFile.packageToRelativePath()}")
