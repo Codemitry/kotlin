@@ -7,20 +7,22 @@ package org.jetbrains.kotlin.mppconverter
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
-import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.kotlin.config.JvmTarget
+import com.intellij.openapi.util.io.FileUtil
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.idea.codeInsight.gradle.MultiplePluginVersionGradleImportingTestCase
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.debugger.readAction
+import org.jetbrains.kotlin.idea.test.allKotlinFiles
 import org.jetbrains.kotlin.mppconverter.gradle.BuildGradleFileForMultiplatformProjectConfigurator
 import org.jetbrains.kotlin.mppconverter.gradle.GradleProjectHelper
-import org.jetbrains.kotlin.platform.js.JsPlatforms
-import org.jetbrains.kotlin.platform.jvm.JdkPlatform
+import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
+import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
+import org.jetbrains.kotlin.mppconverter.visitor.KtActualMakerVisitorVoid
+import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid
 import org.jetbrains.kotlin.psi.KtFile
 import org.junit.Test
 import java.io.File
 
-// наследование только для того, чтобы application у ApplicationManager был не null
 class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     @Test
@@ -28,44 +30,44 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
         assertJvmProjectStructure()
 
-        GradleProjectHelper(jvmProjectDirectory).apply {
-            connectToProject()
+        val gph = GradleProjectHelper(jvmProjectDirectory)
+        gph.connectToProject()
 
-            loadDependencies { dependencies ->
-                this@MppProjectConverter.dependencies = dependencies
+        gph.loadDependencies { dependencies ->
+            this@MppProjectConverter.dependencies = dependencies
 
-                ApplicationManager.getApplication().invokeLater {
-                    ApplicationManager.getApplication().readAction {
-                        setupProject()
+            ApplicationManager.getApplication().invokeLater {
+                ApplicationManager.getApplication().readAction {
+                    setupProject()
 
-                        WriteCommandAction.runWriteCommandAction(project) {
-                            processFiles()
-                        }
-
+                    WriteCommandAction.runWriteCommandAction(project) {
+                        processFiles()
                     }
+
                 }
             }
-
-            closeConnection()
         }
+
+        gph.closeConnection()
 
     }
 
-    /*
-    way to create ktfile in runtime:
-    val file = File("C:\\Users\\Codemitry\\Desktop\\test_mpp\\src\\jvmMain\\kotlin\\din\\Din.kt");
-    val text = configureKotlinVersionAndProperties(FileUtil.loadFile(file, true));
-    val vf = createProjectSubFile(file.path.substringAfter(testDataDirectory().path + File.separator), text);
-    vf.putUserData(VfsTestUtil.TEST_DATA_FILE_PATH, file.absolutePath); val kt = (vf.toPsiFile(project) as KtFile);
-    kt.createTempCopy(file.readText())
-     */
+    private fun addKtFileToProject(path: String): KtFile {
+        val file = File(path)
+        val text = configureKotlinVersionAndProperties(FileUtil.loadFile(file, true))
+        val virtualFile = createProjectSubFile(file.path.substringAfter(testDataDirectory().path + File.separator), text)
+        return virtualFile.toPsiFile(project) as KtFile
+    }
 
 
-    var jvmProjectDirectory: String = "W:\\Kotlin\\Projects\\du"
+    var jvmProjectDirectory: String = "W:\\Kotlin\\Projects\\tests\\fedClient"
 
-    lateinit var jvmFiles: List<VirtualFile>
 
-    var multiplatformProjectDirectory: String = "C:\\Users\\Codemitry\\Desktop\\${File(jvmProjectDirectory).name}_mpp"
+    var multiplatformProjectDirectory: String = "C:/Users/Codemitry/Desktop/${File(jvmProjectDirectory).name}_mpp"
+    lateinit var commonMainSources: String
+    lateinit var jvmMainSources: String
+    lateinit var jsMainSources: String
+
     var repositories: List<String>? = listOf("{{kts_kotlin_plugin_repositories}}")
     var dependencies: List<String>? = null
 
@@ -95,50 +97,83 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         }
 
         val commonMain = File(src, "commonMain").apply { mkdir() }
-        val jvmMain = File(src, "jvmMain").apply { mkdir() }
-        val jsMain = File(src, "jsMain").apply { mkdir() }
+        val commonMainSrcFile = File(commonMain, "kotlin").apply {
+            mkdir()
+            commonMainSources = absolutePath
+        }
+        File(commonMainSrcFile, "__jvm").apply { mkdir() }
 
-        File(commonMain, "kotlin/__jvm").apply { mkdirs() }
-        File(jvmMain, "kotlin/__jvm").apply {
-            mkdirs()
-            // create jvm temporary file to create copy and analyze with jvm analyzer
-            File(this, "tmp.kt").apply { createNewFile() }
+
+        val jvmMain = File(src, "jvmMain").apply { mkdir() }
+        File(jvmMain, "kotlin").apply {
+            mkdir()
+            jvmMainSources = absolutePath
         }
 
-        File(jvmMain, "kotlin").mkdir()
-        File(jsMain, "kotlin").mkdir()
+        val jsMain = File(src, "jsMain").apply { mkdir() }
+        File(jsMain, "kotlin").apply {
+            mkdir()
+            jsMainSources = absolutePath
+        }
+
     }
 
     private fun setupProject() {
         createStructure()
 
         File(jvmProjectDirectory, "src/main/kotlin").walkTopDown().filter { it.extension == "kt" }.toList().forEach { curJvmFile ->
-            File(multiplatformProjectDirectory, "src/commonMain/kotlin/__jvm/${curJvmFile.name}").apply {
-                createNewFile()
-                // delete all '\r' because in intellij idea's guide said that strings delimiters are only '\n'
-                writeText(curJvmFile.readText().replace("\r", ""))
-            }
+            curJvmFile.copyTo("$commonMainSources/__jvm")
 
             // setup mpp project
-            val allKtFiles = importProjectFromTestData()
-            jvmFiles = allKtFiles.filter { it.extension == "kt" && it.path.contains("commonMain/kotlin/__jvm/") }
+            importProjectFromTestData()
         }
     }
 
 
     private fun processFiles() {
-        jvmFiles.forEach { jvmFile ->
-            val ktFile = jvmFile.toPsiFile(project) as KtFile
 
-            val converter = MppFileConverter(ktFile)
-            converter.convert(
-                "${multiplatformProjectDirectory}/src/commonMain/kotlin/",
-                "${multiplatformProjectDirectory}/src/jvmMain/kotlin/"
-            )
-            File("${multiplatformProjectDirectory}/src/commonMain/kotlin/__jvm", jvmFile.name).delete()
+        var fullyJvmDependentFiles = project.allKotlinFiles().filter {
+            it.isInCommonSources() && it.isNotResolvable() && it.isResolvableWithJvmAnalyzer() && !it.canConvertToCommon()
         }
-        File("${multiplatformProjectDirectory}/src/commonMain/kotlin/__jvm").delete()
-        File("${multiplatformProjectDirectory}/src/jvmMain/kotlin/__jvm").delete()
+
+        while (fullyJvmDependentFiles.isNotEmpty()) {
+            fullyJvmDependentFiles.forEach {
+                it.moveTo("$jvmMainSources/${it.packageToRelativePath()}")
+            }
+
+            fullyJvmDependentFiles = project.allKotlinFiles()
+                .filter { it.isInCommonSources() && it.isNotResolvable() && it.isResolvableWithJvmAnalyzer() && !it.canConvertToCommon() }
+        }
+
+        project.allKotlinFiles().filter { it.isInCommonSources() }.forEach { jvmKtFile ->
+
+            if (jvmKtFile.isResolvable()) {
+                // the file is fully resolvable with common-analyze
+                jvmKtFile.moveTo("${commonMainSources}/${jvmKtFile.packageToRelativePath()}")
+            } else {
+                // create here common file with expects
+                val expectFile = jvmKtFile.getExpectFile()
+                expectFile.createDirsAndWriteFile("${commonMainSources}/${expectFile.packageToRelativePath()}")
+
+                // create here jvm/js files with actuals
+                when {
+                    jvmKtFile.isResolvableWithJvmAnalyzer() -> {
+                        val actualFile = jvmKtFile.getActualFile()
+                        actualFile.createDirsAndWriteFile("${jvmMainSources}/${actualFile.packageToRelativePath()}")
+                    }
+                    true /* try to resolve with JS analyzer */ -> {
+                    }
+                    else -> {
+                        error("Ooooups... File ${jvmKtFile.name} can be resolved!")
+                    }
+                }
+
+            }
+
+            File("${commonMainSources}/__jvm", jvmKtFile.name).delete()
+        }
+        File("${commonMainSources}/__jvm").delete()
+        File("${jvmMainSources}/__jvm").delete()
     }
 
 
@@ -166,4 +201,69 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     override fun testDataDirectory(): File {
         return File(multiplatformProjectDirectory)
     }
+
+    private fun KtFile.moveTo(dir: String): KtFile {
+        delete()
+        File("$multiplatformProjectDirectory/${File(virtualFilePath).path.substringAfter(File("project").path)}").delete()
+        createDirsAndWriteFile(dir)
+
+        return addKtFileToProject("${dir}/${name}")
+    }
+
+    private fun KtFile.remove() {
+        delete()
+        File("$multiplatformProjectDirectory/${File(virtualFilePath).path.substringAfter(File("project").path)}").delete()
+    }
+
+    private fun KtFile.copyTo(dir: String): KtFile {
+        createDirsAndWriteFile(dir)
+        return addKtFileToProject("${dir}/${name}")
+    }
+
+    private fun KtFile.isResolvableWithJvmAnalyzer(): Boolean {
+        val jvmSourceFile = copyTo("${jvmMainSources}/__jvm")
+        val isResolvedWithJvmAnalyzer = jvmSourceFile.isResolvable()
+        jvmSourceFile.remove()
+
+        return isResolvedWithJvmAnalyzer
+    }
+
+    private fun KtFile.getExpectFile(): KtFile = (this.copy() as KtFile).apply { toExpect() }
+
+    private fun KtFile.getActualFile(): KtFile = (this.copy() as KtFile).apply { toActual() }
+
+    private fun PsiElement.toExpect(): PsiElement {
+        when (this) {
+            is KtFile -> {
+                this.clearUnresolvableImports()
+                declarations.filter { it.isNotResolvable() }.forEach { it.toExpect() }
+            }
+            else -> accept(KtExpectMakerVisitorVoid())
+        }
+        return this
+    }
+
+
+    private fun PsiElement.toActual(): PsiElement {
+        when (this) {
+            is KtFile -> {
+                for (declaration in declarations) {
+                    if (declaration.isNotResolvable()) {
+                        declaration.toActual()
+                    } else {
+                        declaration.delete()
+                    }
+                }
+            }
+            else -> {
+                accept(KtActualMakerVisitorVoid())
+            }
+        }
+
+        return this
+    }
+
+
+    private fun KtFile.isInCommonSources(): Boolean =
+        File(virtualFilePath).path.contains(File(commonMainSources).path.substringAfter(File(multiplatformProjectDirectory).path))
 }

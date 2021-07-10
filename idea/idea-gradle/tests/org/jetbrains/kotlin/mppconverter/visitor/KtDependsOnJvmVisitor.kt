@@ -6,14 +6,19 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
 import com.intellij.openapi.project.Project
+import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.refactoring.createTempCopy
 import org.jetbrains.kotlin.idea.test.allKotlinFiles
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.bindingContextUtil.getAbbreviatedTypeOrType
+import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.callUtil.getType
+import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.typeUtil.containsError
 
+@Deprecated("Will be removed soon. Replaced with KtResolverVisitor with jvm analyzer for all file")
 class KtDependsOnJvmVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
     override fun visitKtElement(element: KtElement, data: Unit): Boolean {
         return element.acceptChildren(this, data) { it.any { it } }
@@ -24,14 +29,64 @@ class KtDependsOnJvmVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
         return file.acceptChildren(this, data) { it.any { it } }
     }
 
+    override fun visitImportList(importList: KtImportList, data: Unit?): Boolean {
+        // mock. import expressions are not resolvable
+        return false
+    }
+
     override fun visitTypeReference(typeReference: KtTypeReference, data: Unit?): Boolean {
         val type = typeReference.getAbbreviatedTypeOrType()
         return if (type == null || type.containsError()) {
-            val jvmType = typeReference.getAbbreviatedTypeOrTypeWithJvmAnalyzer() ?: error("type of KtTypeReference is null inside jvm check") // when?
-            jvmType.isResolvable()
+            true  // uncomment and delete "true"
+//            val jvmType = typeReference.getAbbreviatedTypeOrTypeWithJvmAnalyzer() ?: error("type of KtTypeReference is null inside jvm check") // when?
+//            jvmType.isResolvable()
         } else {
             type.isNotResolvable()
         }
+    }
+
+    override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression, data: Unit?): Boolean {
+//        return super.visitDotQualifiedExpression(expression, data)
+        // TODO how to resolve imports?
+        return false
+    }
+
+    override fun visitCallableReferenceExpression(expression: KtCallableReferenceExpression, data: Unit?): Boolean {
+        return super.visitCallableReferenceExpression(expression, data)
+//        return false
+    }
+
+    override fun visitCallExpression(expression: KtCallExpression, data: Unit?): Boolean {
+        if (expression.getResolvedCall()?.resultingDescriptor != null &&
+            expression.getType()?.isResolvable() == true) {
+            return false
+        } else {
+            return true  // TODO: make jvm-resolving check instead true returning
+            // create this in jvm tmp
+        }
+    }
+
+
+    override fun visitArrayAccessExpression(expression: KtArrayAccessExpression, data: Unit?): Boolean {
+        // getType is null
+        return super.visitArrayAccessExpression(expression, data)
+    }
+
+    override fun visitReferenceExpression(expression: KtReferenceExpression, data: Unit?): Boolean {
+        println()
+//        if (expression.containingKtFile.name == "Measure.kt")
+//            println("")
+
+//        val descriptors = expression.resolveMainReferenceToDescriptors()
+//
+//        if (descriptors.isNotEmpty()) {
+//            return false
+//        } else {
+//            println()
+//            // mpp analyzer can't analyze the reference expression, try jvm analyzer
+//        }
+//        return super.visitReferenceExpression(expression, data)
+        return false
     }
 
     private fun KotlinType.isResolvable(): Boolean {
@@ -51,6 +106,10 @@ class KtDependsOnJvmVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
     }
 
     private fun KtTypeReference.getAbbreviatedTypeOrType(): KotlinType? = getAbbreviatedTypeOrType(analyze())
+
+    private fun KtElement.getResolvedCall(): ResolvedCall<out CallableDescriptor>? = getResolvedCall(analyze())
+
+    private fun KtExpression.getType(): KotlinType? = getType(analyze())
 
 //    private fun KtProperty.getTypeWithJvmAnalyzer(bindingContext: BindingContext = analyze()): KotlinType? {
 //        val tmpFile = project.createJvmTmpCopyKtFile(
@@ -83,7 +142,13 @@ class KtDependsOnJvmVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
 
 }
 
+@Deprecated("Will be removed soon. Replaced with KtResolverVisitor with jvm analyzer for all file")
 fun KtFile.dependsOnJvm(): Boolean {
     return accept(KtDependsOnJvmVisitor(project), Unit)
 }
 
+
+@Deprecated("Will be removed soon. See KtResolverVisitor")
+fun KtElement.dependsOnJvm(): Boolean {
+    return accept(KtDependsOnJvmVisitor(project), Unit)
+}

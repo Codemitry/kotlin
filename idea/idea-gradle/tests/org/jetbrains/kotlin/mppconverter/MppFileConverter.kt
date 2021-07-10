@@ -2,11 +2,13 @@ package org.jetbrains.kotlin.mppconverter
 
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.mppconverter.visitor.KtActualMakerVisitorVoid
+import org.jetbrains.kotlin.mppconverter.visitor.KtDependsOnJvmVisitor
 import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid
 import org.jetbrains.kotlin.mppconverter.visitor.dependsOnJvm
 import org.jetbrains.kotlin.psi.KtFile
 import java.io.File
 
+@Deprecated("Will be removed soon. Partly went to MppProjectConverter")
 class MppFileConverter(private val ktFile: KtFile) {
 
     fun convert(commonSources: String, jvmSources: String) {
@@ -40,27 +42,27 @@ class MppFileConverter(private val ktFile: KtFile) {
     }
 
 
-    private fun KtFile.packageToRelativePath(): String {
-        return if (ktFile.packageDirective?.isRoot == true)
-            ""
-        else
-            ktFile.packageFqName.asString().replace(".", "/")
-    }
-
-    private fun KtFile.createDirsAndWriteFile(to: String) {
-        File(to, this.name).also {
-            it.parentFile.mkdirs()
-            it.createNewFile()
-            it.writeText(this.text)
-        }
-    }
+//    private fun KtFile.packageToRelativePath(): String {
+//        return if (packageDirective?.isRoot == true)
+//            ""
+//        else
+//            packageFqName.asString().replace(".", "/")
+//    }
+//
+//    private fun KtFile.createDirsAndWriteFile(to: String) {
+//        File(to, this.name).also {
+//            it.parentFile.mkdirs()
+//            it.createNewFile()
+//            it.writeText(this.text)
+//        }
+//    }
 
 
     private fun PsiElement.toExpect(): PsiElement {
         when (this) {
             is KtFile -> {
-                this.clearJvmDependentImports()
-                declarations.filter { it.isJvmDependent() }.forEach { it.toExpect() }
+                this.clearUnresolvableImports()
+                declarations.filter { it.accept(KtDependsOnJvmVisitor(project), Unit) }.forEach { it.toExpect() }
             }
             else -> accept(KtExpectMakerVisitorVoid())
         }
@@ -72,7 +74,7 @@ class MppFileConverter(private val ktFile: KtFile) {
         when (this) {
             is KtFile -> {
                 for (declaration in declarations) {
-                    if (declaration.isJvmDependent()) {
+                    if (declaration.accept(KtDependsOnJvmVisitor(project), Unit)) {
                         declaration.toActual()
                     } else {
                         declaration.delete()
