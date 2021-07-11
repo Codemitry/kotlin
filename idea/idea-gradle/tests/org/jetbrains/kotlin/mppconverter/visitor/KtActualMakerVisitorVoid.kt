@@ -5,11 +5,9 @@ import org.jetbrains.kotlin.mppconverter.removeInitializer
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
 
-class KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
+object KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
 
     override fun visitNamedFunction(function: KtNamedFunction) {
-        super.visitNamedFunction(function)
-
         function.addModifier(ACTUAL_KEYWORD)
     }
 
@@ -60,7 +58,7 @@ class KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
 }
 
 private fun KtDeclaration.makeActual() {
-    accept(KtActualMakerVisitorVoid())
+    accept(KtActualMakerVisitorVoid)
 }
 
 fun KtFile.getFileWithActuals(): KtFile = (this.copy() as KtFile).apply {

@@ -155,11 +155,16 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
                 val expectFile = jvmKtFile.getFileWithExpects()
                 expectFile.createDirsAndWriteFile("${commonMainSources}/${expectFile.packageToRelativePath()}")
 
+                val actualFile = jvmKtFile.getFileWithActuals()
+                val actualWithTODOsFile = jvmKtFile.getFileWithActualsWithTODOs()
+
+
                 // create here jvm/js files with actuals
                 when {
                     jvmKtFile.isResolvableWithJvmAnalyzer() -> {
-                        val actualFile = jvmKtFile.getFileWithActuals()
                         actualFile.createDirsAndWriteFile("${jvmMainSources}/${actualFile.packageToRelativePath()}")
+                        actualWithTODOsFile.createDirsAndWriteFile("${jsMainSources}/${actualWithTODOsFile.packageToRelativePath()}")
+
                     }
                     true /* try to resolve with JS analyzer */ -> {
                     }
