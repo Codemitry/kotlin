@@ -8,13 +8,15 @@ import org.jetbrains.kotlin.lexer.KtTokens.DATA_KEYWORD
 import org.jetbrains.kotlin.lexer.KtTokens.EXPECT_KEYWORD
 import org.jetbrains.kotlin.mppconverter.createKtParameterFromProperty
 import org.jetbrains.kotlin.mppconverter.createKtPropertyWithoutInitializer
+import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
+import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid.removeUnresolvableImports
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.isPropertyParameter
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 
 
-class KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
+object KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
     override fun visitProperty(property: KtProperty) {
         super.visitProperty(property)
 
@@ -68,6 +70,7 @@ class KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
 
     }
 
+    // KtClass
     override fun visitClass(klass: KtClass) {
         super.visitClass(klass)
 
@@ -91,7 +94,6 @@ class KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
         // TODO: remove delegation implementation
     }
 
-    // KtClass
     private fun KtPrimaryConstructor.replacePropertiesWithParameters() {
         this.valueParameters.forEach { param ->
             param.replace(createKtParameterFromProperty(param))
@@ -120,4 +122,15 @@ class KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
         addAfter(KtPsiFactory(element).createNewLine(), lBrace)
     }
 
+    fun KtImportList.removeUnresolvableImports() {
+        imports.filter { it.isNotResolvable() }.forEach { it.delete() }
+    }
+
+}
+
+private fun KtDeclaration.makeExpect() = accept(KtExpectMakerVisitorVoid)
+
+fun KtFile.getFileWithExpects(): KtFile = (this.copy() as KtFile).apply {
+    declarations.filter { it.isNotResolvable() }.forEach { it.makeExpect() }
+    importList?.removeUnresolvableImports()
 }

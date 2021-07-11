@@ -2,6 +2,7 @@ package org.jetbrains.kotlin.mppconverter.visitor
 
 import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.mppconverter.removeInitializer
+import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
 
 class KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
@@ -55,5 +56,19 @@ class KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
             return
 
         klass.addModifier(ACTUAL_KEYWORD)
+    }
+}
+
+private fun KtDeclaration.makeActual() {
+    accept(KtActualMakerVisitorVoid())
+}
+
+fun KtFile.getFileWithActuals(): KtFile = (this.copy() as KtFile).apply {
+    for (declaration in declarations) {
+        if (declaration.isResolvable()) {
+            declaration.delete()
+        } else {
+            declaration.makeActual()
+        }
     }
 }

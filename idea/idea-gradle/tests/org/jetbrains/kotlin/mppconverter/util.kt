@@ -4,7 +4,6 @@ import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.getReturnTypeReference
 import org.jetbrains.kotlin.idea.util.ifTrue
 import org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD
-import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -101,13 +100,6 @@ fun KtFunction.signatureIsResolvable(): Boolean {
     return true
 }
 
-
-fun KtFile.clearUnresolvableImports() {
-    this.importDirectives.forEach {
-        if (it.isNotResolvable())
-            it.delete()
-    }
-}
 
 
 fun KtFile.packageToRelativePath(): String {

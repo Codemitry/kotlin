@@ -8,7 +8,6 @@ package org.jetbrains.kotlin.mppconverter
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.util.io.FileUtil
-import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.idea.codeInsight.gradle.MultiplePluginVersionGradleImportingTestCase
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.debugger.readAction
@@ -17,8 +16,7 @@ import org.jetbrains.kotlin.mppconverter.gradle.BuildGradleFileForMultiplatformP
 import org.jetbrains.kotlin.mppconverter.gradle.GradleProjectHelper
 import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
-import org.jetbrains.kotlin.mppconverter.visitor.KtActualMakerVisitorVoid
-import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid
+import org.jetbrains.kotlin.mppconverter.visitor.*
 import org.jetbrains.kotlin.psi.KtFile
 import org.junit.Test
 import java.io.File
@@ -28,7 +26,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     @Test
     fun main() {
 
-        assertJvmProjectStructure()
+        assertGradleOneModuleProjectStructure()
 
         val gph = GradleProjectHelper(jvmProjectDirectory)
         gph.connectToProject()
@@ -60,7 +58,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     }
 
 
-    var jvmProjectDirectory: String = "W:\\Kotlin\\Projects\\tests\\fedClient"
+    var jvmProjectDirectory: String = "W:\\Kotlin\\Projects\\du"
 
 
     var multiplatformProjectDirectory: String = "C:/Users/Codemitry/Desktop/${File(jvmProjectDirectory).name}_mpp"
@@ -91,9 +89,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
                 buildGradleBuilder.jvmMainDependencies(deps)
             }
 
-            writeText(
-                buildGradleBuilder.build().text
-            )
+            writeText(buildGradleBuilder.build().text)
         }
 
         val commonMain = File(src, "commonMain").apply { mkdir() }
@@ -130,8 +126,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     }
 
 
-    private fun processFiles() {
-
+    private fun moveAllFilesThatDependsOnJvmAndCantBeConvertedToCommon() {
         var fullyJvmDependentFiles = project.allKotlinFiles().filter {
             it.isInCommonSources() && it.isNotResolvable() && it.isResolvableWithJvmAnalyzer() && !it.canConvertToCommon()
         }
@@ -144,6 +139,11 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
             fullyJvmDependentFiles = project.allKotlinFiles()
                 .filter { it.isInCommonSources() && it.isNotResolvable() && it.isResolvableWithJvmAnalyzer() && !it.canConvertToCommon() }
         }
+    }
+
+    private fun processFiles() {
+
+        moveAllFilesThatDependsOnJvmAndCantBeConvertedToCommon()
 
         project.allKotlinFiles().filter { it.isInCommonSources() }.forEach { jvmKtFile ->
 
@@ -152,13 +152,13 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
                 jvmKtFile.moveTo("${commonMainSources}/${jvmKtFile.packageToRelativePath()}")
             } else {
                 // create here common file with expects
-                val expectFile = jvmKtFile.getExpectFile()
+                val expectFile = jvmKtFile.getFileWithExpects()
                 expectFile.createDirsAndWriteFile("${commonMainSources}/${expectFile.packageToRelativePath()}")
 
                 // create here jvm/js files with actuals
                 when {
                     jvmKtFile.isResolvableWithJvmAnalyzer() -> {
-                        val actualFile = jvmKtFile.getActualFile()
+                        val actualFile = jvmKtFile.getFileWithActuals()
                         actualFile.createDirsAndWriteFile("${jvmMainSources}/${actualFile.packageToRelativePath()}")
                     }
                     true /* try to resolve with JS analyzer */ -> {
@@ -177,7 +177,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     }
 
 
-    private fun assertJvmProjectStructure() {
+    private fun assertGradleOneModuleProjectStructure() {
         // TODO migrate check to Gradle Tooling API
         val root = File(jvmProjectDirectory)
         if (!root.exists()) throw IllegalArgumentException("Project directory does not exist")
@@ -227,42 +227,6 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
         return isResolvedWithJvmAnalyzer
     }
-
-    private fun KtFile.getExpectFile(): KtFile = (this.copy() as KtFile).apply { toExpect() }
-
-    private fun KtFile.getActualFile(): KtFile = (this.copy() as KtFile).apply { toActual() }
-
-    private fun PsiElement.toExpect(): PsiElement {
-        when (this) {
-            is KtFile -> {
-                this.clearUnresolvableImports()
-                declarations.filter { it.isNotResolvable() }.forEach { it.toExpect() }
-            }
-            else -> accept(KtExpectMakerVisitorVoid())
-        }
-        return this
-    }
-
-
-    private fun PsiElement.toActual(): PsiElement {
-        when (this) {
-            is KtFile -> {
-                for (declaration in declarations) {
-                    if (declaration.isNotResolvable()) {
-                        declaration.toActual()
-                    } else {
-                        declaration.delete()
-                    }
-                }
-            }
-            else -> {
-                accept(KtActualMakerVisitorVoid())
-            }
-        }
-
-        return this
-    }
-
 
     private fun KtFile.isInCommonSources(): Boolean =
         File(virtualFilePath).path.contains(File(commonMainSources).path.substringAfter(File(multiplatformProjectDirectory).path))
