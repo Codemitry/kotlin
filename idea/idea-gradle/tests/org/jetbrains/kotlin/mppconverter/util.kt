@@ -1,12 +1,20 @@
 package org.jetbrains.kotlin.mppconverter
 
+import com.intellij.ide.highlighter.JavaFileType
+import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiJavaFile
+import com.intellij.psi.PsiManager
+import com.intellij.psi.search.FileTypeIndex
+import com.intellij.psi.search.ProjectScope
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.getReturnTypeReference
 import org.jetbrains.kotlin.idea.util.ifTrue
 import org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.plugins.groovy.GroovyFileType
+import org.jetbrains.plugins.groovy.lang.psi.GroovyFile
 import java.io.File
 
 
@@ -126,3 +134,10 @@ fun File.copyTo(dir: String): File =
         createNewFile()
         writeText(this@copyTo.readText())
     }
+
+fun Project.allGroovyFiles(): List<GroovyFile> {
+    val virtualFiles = FileTypeIndex.getFiles(GroovyFileType.GROOVY_FILE_TYPE, ProjectScope.getProjectScope(this))
+    return virtualFiles
+        .map { PsiManager.getInstance(this).findFile(it) }
+        .filterIsInstance<GroovyFile>()
+}
