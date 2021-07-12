@@ -6,14 +6,14 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
 import com.intellij.openapi.project.Project
-import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.lexer.KtTokens.ACTUAL_KEYWORD
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
 
 object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
 
     override fun visitNamedFunction(function: KtNamedFunction) {
-        function.addModifier(KtTokens.ACTUAL_KEYWORD)
+        function.addModifier(ACTUAL_KEYWORD)
 
         if (function.hasBlockBody()) {
             function.bodyBlockExpression?.replace(createTODOCallExpressionInBody(function.project))
@@ -22,6 +22,22 @@ object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
         if (function.hasInitializer()) {
             function.initializer?.replace(createTODOCallExpression(function.project))
         }
+    }
+
+    override fun visitClass(klass: KtClass) {
+        klass.addModifier(ACTUAL_KEYWORD)
+        super.visitClass(klass)
+    }
+
+    override fun visitProperty(property: KtProperty) {
+        property.initializer?.replace(createTODOCallExpression(property.project))
+
+        property.setter?.initializer?.replace(createTODOCallExpression(property.project))
+        property.setter?.bodyBlockExpression?.replace(createTODOCallExpressionInBody(property.project))
+
+
+        property.getter?.initializer?.replace(createTODOCallExpression(property.project))
+        property.getter?.bodyBlockExpression?.replace(createTODOCallExpressionInBody(property.project))
     }
 
 }
