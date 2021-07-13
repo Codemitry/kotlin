@@ -30,7 +30,6 @@ class GradleProjectHelper(projectRoot: String) {
             connection = connect()
         }
 
-        connection?.getModel(GradleProject::class.java)
     }
 
     fun loadDependencies(configuration: String = "implementation", onDependenciesLoaded: (List<String>) -> Unit) {

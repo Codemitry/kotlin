@@ -15,6 +15,7 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.plugins.groovy.GroovyFileType
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFile
+import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory
 import java.io.File
 
 
@@ -135,9 +136,10 @@ fun File.copyTo(dir: String): File =
         writeText(this@copyTo.readText())
     }
 
-fun Project.allGroovyFiles(): List<GroovyFile> {
-    val virtualFiles = FileTypeIndex.getFiles(GroovyFileType.GROOVY_FILE_TYPE, ProjectScope.getProjectScope(this))
-    return virtualFiles
-        .map { PsiManager.getInstance(this).findFile(it) }
-        .filterIsInstance<GroovyFile>()
+fun Project.createTmpGroovyFile(content: CharSequence, isPhysical: Boolean = false, context: PsiElement? = null): GroovyFile {
+    return GroovyPsiElementFactory.getInstance(this).createGroovyFile(content, isPhysical, context)
+}
+
+fun Project.createTmpKotlinScriptFile(filename: String = "tmp.kts", content: String): KtFile {
+    return KtPsiFactory(this).createFile(filename, content)
 }

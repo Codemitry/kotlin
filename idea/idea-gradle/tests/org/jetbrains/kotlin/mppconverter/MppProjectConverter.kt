@@ -7,7 +7,9 @@ package org.jetbrains.kotlin.mppconverter
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
+import com.intellij.psi.PsiFile
 import org.jetbrains.kotlin.idea.codeInsight.gradle.MultiplePluginVersionGradleImportingTestCase
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.debugger.readAction
@@ -17,7 +19,10 @@ import org.jetbrains.kotlin.mppconverter.gradle.GradleProjectHelper
 import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.mppconverter.visitor.*
+import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtScriptInitializer
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.path.GrMethodCallExpression
 import org.junit.Test
 import java.io.File
 
@@ -30,6 +35,29 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
         val gph = GradleProjectHelper(jvmProjectDirectory)
         gph.connectToProject()
+
+        ApplicationManager.getApplication().invokeLater {
+            ApplicationManager.getApplication().readAction {
+                when (gph.buildScriptFileType) {
+                    GradleProjectHelper.BuildScriptFileType.KotlinScript -> {
+                        val repositoriesCall = project.createTmpKotlinScriptFile(
+                            "build.gradle.kts",
+                            gph.buildScriptFile.readText()
+                        ).script?.blockExpression?.children?.filterIsInstance<KtScriptInitializer>()
+                            ?.filter { it.firstChild is KtCallExpression }
+                            ?.map { it.firstChild as KtCallExpression }?.find { it.calleeExpression?.text == "repositories" }
+
+                        repositories = repositoriesCall?.lambdaArguments?.first()?.getLambdaExpression()?.bodyExpression?.text
+                    }
+                    GradleProjectHelper.BuildScriptFileType.GroovyScript -> {
+                        val repositoriesCall = project.createTmpGroovyFile(gph.buildScriptFile.readText()).children
+                            .filterIsInstance<GrMethodCallExpression>()
+                            .find { it.invokedExpression.text == "repositories" }
+                        repositories = repositoriesCall?.closureArguments?.first()?.statements?.joinToString("\n")
+                    }
+                }
+            }
+        }
 
         gph.loadDependencies { dependencies ->
             this@MppProjectConverter.dependencies = dependencies
@@ -57,8 +85,12 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         return virtualFile.toPsiFile(project) as KtFile
     }
 
+    private fun Project.addFileToProject(file: File, atPath: String): PsiFile {
+        val virtualFile = createProjectSubFile("$atPath${File.separator}${file.name}", file.readText())
+        return virtualFile.toPsiFile(this)!!
+    }
 
-    var jvmProjectDirectory: String = "W:\\Kotlin\\Projects\\du"
+    var jvmProjectDirectory: String = "W:\\Kotlin\\Projects\\Polina"
 
 
     var multiplatformProjectDirectory: String = "C:/Users/Codemitry/Desktop/${File(jvmProjectDirectory).name}_mpp"
@@ -66,10 +98,75 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     lateinit var jvmMainSources: String
     lateinit var jsMainSources: String
 
-    var repositories: List<String>? = listOf("{{kts_kotlin_plugin_repositories}}")
+    val tmpDirectoryName = "__tmp"
+    val tmpCommonDirectory by lazy { "$commonMainSources${File.separator}$tmpDirectoryName" }
+    val tmpJvmDirectory by lazy { "$jvmMainSources${File.separator}$tmpDirectoryName" }
+
+    var repositories: String? = null
     var dependencies: List<String>? = null
 
+    private fun createMppFolderStructure() {
+        /*
+        project:
+            - src:
+                - commonMain:
+                    - kotlin
+                - jvmMain:
+                    - kotlin
+                - jsMain
+                    - kotlin
+            - build.gradle.kts
 
+         */
+        File(multiplatformProjectDirectory).mkdirs()
+
+        val src = File(multiplatformProjectDirectory, "src").apply { mkdir() }
+
+        val commonMain = File(src, "commonMain").apply { mkdir() }
+        val commonMainSrcFile = File(commonMain, "kotlin").apply {
+            mkdir()
+            commonMainSources = absolutePath
+        }
+
+        val jvmMain = File(src, "jvmMain").apply { mkdir() }
+        File(jvmMain, "kotlin").apply {
+            mkdir()
+            jvmMainSources = absolutePath
+        }
+
+        val jsMain = File(src, "jsMain").apply { mkdir() }
+        File(jsMain, "kotlin").apply {
+            mkdir()
+            jsMainSources = absolutePath
+        }
+    }
+
+    private fun createTmpDirectories() {
+        File(tmpCommonDirectory).mkdirs()
+        File(tmpJvmDirectory).mkdirs()
+    }
+
+    private fun createBuildScriptFile() {
+        val buildScript = File(multiplatformProjectDirectory, "build.gradle.kts").apply {
+            createNewFile()
+
+            val buildGradleBuilder = BuildGradleFileForMultiplatformProjectConfigurator.Builder()
+            repositories?.let { buildGradleBuilder.repositories(listOf(it)) }
+            dependencies?.let {
+                val deps = it.map { dependency ->
+                    BuildGradleFileForMultiplatformProjectConfigurator.Dependency(dependency, "implementation")
+                }
+
+                buildGradleBuilder.commonMainDependencies(deps)
+                buildGradleBuilder.jvmMainDependencies(deps)
+            }
+
+            writeText(buildGradleBuilder.build().text)
+        }
+    }
+
+
+    @Deprecated("Use createMppFolderStructure() and separately create build script file")
     private fun createStructure() {
         File(multiplatformProjectDirectory).mkdirs()
 
@@ -79,7 +176,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
             createNewFile()
 
             val buildGradleBuilder = BuildGradleFileForMultiplatformProjectConfigurator.Builder()
-            repositories?.let { buildGradleBuilder.repositories(it) }
+            repositories?.let { buildGradleBuilder.repositories(listOf(it)) }
             dependencies?.let {
                 val deps = it.map { dependency ->
                     BuildGradleFileForMultiplatformProjectConfigurator.Dependency(dependency, "implementation")
@@ -115,10 +212,12 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     }
 
     private fun setupProject() {
-        createStructure()
+        createMppFolderStructure()
+        createTmpDirectories()
+        createBuildScriptFile()
 
         File(jvmProjectDirectory, "src/main/kotlin").walkTopDown().filter { it.extension == "kt" }.toList().forEach { curJvmFile ->
-            curJvmFile.copyTo("$commonMainSources/__jvm")
+            curJvmFile.copyTo(tmpCommonDirectory)
 
             // setup mpp project
             importProjectFromTestData()
@@ -175,10 +274,10 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
             }
 
-            File("${commonMainSources}/__jvm", jvmKtFile.name).delete()
+            File(tmpCommonDirectory, jvmKtFile.name).delete()
         }
-        File("${commonMainSources}/__jvm").delete()
-        File("${jvmMainSources}/__jvm").delete()
+        File(tmpCommonDirectory).delete()
+        File(tmpJvmDirectory).delete()
     }
 
 
@@ -226,7 +325,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     }
 
     private fun KtFile.isResolvableWithJvmAnalyzer(): Boolean {
-        val jvmSourceFile = copyTo("${jvmMainSources}/__jvm")
+        val jvmSourceFile = copyTo(tmpJvmDirectory)
         val isResolvedWithJvmAnalyzer = jvmSourceFile.isResolvable()
         jvmSourceFile.remove()
 
