@@ -1,6 +1,7 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
 import org.jetbrains.kotlin.lexer.KtTokens.*
+import org.jetbrains.kotlin.mppconverter.canConvertToCommon
 import org.jetbrains.kotlin.mppconverter.removeInitializer
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
@@ -66,7 +67,8 @@ fun KtFile.getFileWithActuals(): KtFile = (this.copy() as KtFile).apply {
         if (declaration.isResolvable()) {
             declaration.delete()
         } else {
-            declaration.makeActual()
+            if (declaration.canConvertToCommon())
+                declaration.makeActual()
         }
     }
 }

@@ -6,6 +6,7 @@ import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.refactoring.fqName.fqName
 import org.jetbrains.kotlin.lexer.KtTokens.DATA_KEYWORD
 import org.jetbrains.kotlin.lexer.KtTokens.EXPECT_KEYWORD
+import org.jetbrains.kotlin.mppconverter.canConvertToCommon
 import org.jetbrains.kotlin.mppconverter.createKtParameterFromProperty
 import org.jetbrains.kotlin.mppconverter.createKtPropertyWithoutInitializer
 import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
@@ -131,6 +132,7 @@ object KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
 private fun KtDeclaration.makeExpect() = accept(KtExpectMakerVisitorVoid)
 
 fun KtFile.getFileWithExpects(): KtFile = (this.copy() as KtFile).apply {
-    declarations.filter { it.isNotResolvable() }.forEach { it.makeExpect() }
+    declarations.filter { it.isNotResolvable() && it.canConvertToCommon() }.forEach { it.makeExpect() }
+    declarations.filter { !it.canConvertToCommon() }.forEach { it.delete() }
     importList?.removeUnresolvableImports()
 }

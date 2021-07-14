@@ -53,7 +53,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
                         val repositoriesCall = project.createTmpGroovyFile(gph.buildScriptFile.readText()).children
                             .filterIsInstance<GrMethodCallExpression>()
                             .find { it.invokedExpression.text == "repositories" }
-                        repositories = repositoriesCall?.closureArguments?.first()?.statements?.joinToString("\n")
+                        repositories = repositoriesCall?.closureArguments?.first()?.statements?.joinToString("\n") { it.text }
                     }
                 }
             }
@@ -90,7 +90,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         return virtualFile.toPsiFile(this)!!
     }
 
-    var jvmProjectDirectory: String = "W:\\Kotlin\\Projects\\Polina"
+    var jvmProjectDirectory: String = "W:\\Kotlin\\Projects\\du"
 
 
     var multiplatformProjectDirectory: String = "C:/Users/Codemitry/Desktop/${File(jvmProjectDirectory).name}_mpp"

@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.mppconverter.visitor
 
 import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.lexer.KtTokens.ACTUAL_KEYWORD
+import org.jetbrains.kotlin.mppconverter.canConvertToCommon
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
 
@@ -51,7 +52,10 @@ fun KtFile.getFileWithActualsWithTODOs(): KtFile = (this.copy() as KtFile).apply
         if (declaration.isResolvable()) {
             declaration.delete()
         } else {
-            declaration.makeActualWithTODOs()
+            if (declaration.canConvertToCommon())
+                declaration.makeActualWithTODOs()
+            else
+                declaration.delete()
         }
     }
 }

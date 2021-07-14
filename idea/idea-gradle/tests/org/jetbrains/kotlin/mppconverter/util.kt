@@ -89,7 +89,7 @@ fun PsiElement.canConvertToCommon(context: BindingContext? = null): Boolean {
         }
 
         is KtFile -> {
-            return this.declarations.all { it.canConvertToCommon(context) }
+            return this.declarations.any { it.canConvertToCommon(context) }
         }
     }
 
