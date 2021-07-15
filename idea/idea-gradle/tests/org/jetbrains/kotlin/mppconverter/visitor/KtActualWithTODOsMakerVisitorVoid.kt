@@ -6,8 +6,9 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
 import com.intellij.openapi.project.Project
-import org.jetbrains.kotlin.lexer.KtTokens.ACTUAL_KEYWORD
+import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.mppconverter.canConvertToCommon
+import org.jetbrains.kotlin.mppconverter.removeInitializer
 import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
@@ -30,11 +31,6 @@ object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
         }
     }
 
-    override fun visitClass(klass: KtClass) {
-        klass.addModifier(ACTUAL_KEYWORD)
-        super.visitClass(klass)
-    }
-
     override fun visitProperty(property: KtProperty) {
         property.initializer?.let { initializer ->
             if (initializer.isNotResolvable()) {
@@ -55,6 +51,57 @@ object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
                 getter.bodyBlockExpression?.replace(createTODOCallExpressionInBody(property.project))
             }
         }
+    }
+
+    // class
+
+    override fun visitClass(klass: KtClass) {
+        klass.addModifier(ACTUAL_KEYWORD)
+
+        if (klass is KtEnumEntry)
+            return
+
+        super.visitClass(klass)
+    }
+
+    override fun visitPrimaryConstructor(constructor: KtPrimaryConstructor) {
+        super.visitPrimaryConstructor(constructor)
+
+        // to prevent situation, when: "class Nameactual constructor()"
+        // class Name constructor() -> class Nameactual constructor() -> class Nameprivate actual constructor() -> class Name actual constructor()
+        val supportingModifier = if (constructor.hasModifier(PRIVATE_KEYWORD)) PUBLIC_KEYWORD else PRIVATE_KEYWORD
+
+        constructor.addModifier(ACTUAL_KEYWORD)
+        constructor.addModifier(supportingModifier)
+        constructor.removeModifier(supportingModifier)
+
+        constructor.valueParameterList?.parameters?.forEach {
+            if (it.hasValOrVar()) {
+                it.addModifier(ACTUAL_KEYWORD)
+            }
+            it.removeInitializer()
+        }
+
+    }
+
+
+    override fun visitSecondaryConstructor(constructor: KtSecondaryConstructor) {
+        super.visitSecondaryConstructor(constructor)
+
+        constructor.addModifier(ACTUAL_KEYWORD)
+
+        constructor.getDelegationCallOrNull()?.let { delegationCall ->
+            if (delegationCall.isNotResolvable()) {
+                delegationCall.valueArgumentList?.arguments?.forEach { it.delete() }
+            }
+        }
+
+        constructor.bodyBlockExpression?.let { bodyBlock ->
+            if (bodyBlock.isNotResolvable()) {
+                bodyBlock.replace(createTODOCallExpressionInBody(constructor.project))
+            }
+        }
+
     }
 
 }
