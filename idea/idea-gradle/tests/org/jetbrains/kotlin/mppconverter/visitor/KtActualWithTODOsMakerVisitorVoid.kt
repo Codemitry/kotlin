@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.mppconverter.visitor
 import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.lexer.KtTokens.ACTUAL_KEYWORD
 import org.jetbrains.kotlin.mppconverter.canConvertToCommon
+import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
 
@@ -16,12 +17,16 @@ object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
     override fun visitNamedFunction(function: KtNamedFunction) {
         function.addModifier(ACTUAL_KEYWORD)
 
-        if (function.hasBlockBody()) {
-            function.bodyBlockExpression?.replace(createTODOCallExpressionInBody(function.project))
+        function.bodyBlockExpression?.let { bodyBlock ->
+            if (bodyBlock.isNotResolvable()) {
+                bodyBlock.replace(createTODOCallExpressionInBody(function.project))
+            }
         }
 
-        if (function.hasInitializer()) {
-            function.initializer?.replace(createTODOCallExpression(function.project))
+        function.initializer?.let { initializer ->
+            if (initializer.isNotResolvable()) {
+                initializer.replace(createTODOCallExpression(function.project))
+            }
         }
     }
 
@@ -31,14 +36,25 @@ object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
     }
 
     override fun visitProperty(property: KtProperty) {
-        property.initializer?.replace(createTODOCallExpression(property.project))
+        property.initializer?.let { initializer ->
+            if (initializer.isNotResolvable()) {
+                initializer.replace(createTODOCallExpression(property.project))
+            }
+        }
 
-        property.setter?.initializer?.replace(createTODOCallExpression(property.project))
-        property.setter?.bodyBlockExpression?.replace(createTODOCallExpressionInBody(property.project))
+        property.setter?.let { setter ->
+            if (setter.isNotResolvable()) {
+                setter.initializer?.replace(createTODOCallExpression(property.project))
+                setter.bodyBlockExpression?.replace(createTODOCallExpressionInBody(property.project))
+            }
+        }
 
-
-        property.getter?.initializer?.replace(createTODOCallExpression(property.project))
-        property.getter?.bodyBlockExpression?.replace(createTODOCallExpressionInBody(property.project))
+        property.getter?.let { getter ->
+            if (getter.isNotResolvable()) {
+                getter.initializer?.replace(createTODOCallExpression(property.project))
+                getter.bodyBlockExpression?.replace(createTODOCallExpressionInBody(property.project))
+            }
+        }
     }
 
 }
@@ -69,6 +85,6 @@ fun KtPsiFactory.createBodyWithExpression(text: String): KtBlockExpression {
     return createFunction("fun foo() { $text }").bodyBlockExpression!!
 }
 
-fun createTODOCallExpression(project: Project): KtExpression = KtPsiFactory(project).createCallExpression("TODO()")
+fun createTODOCallExpression(project: Project): KtExpression = KtPsiFactory(project).createCallExpression("TODO(\"Not yet implemented\")")
 
-fun createTODOCallExpressionInBody(project: Project): KtBlockExpression = KtPsiFactory(project).createBodyWithExpression("TODO()")
+fun createTODOCallExpressionInBody(project: Project): KtBlockExpression = KtPsiFactory(project).createBodyWithExpression("TODO(\"Not yet implemented\")")
