@@ -18,7 +18,10 @@ import org.jetbrains.kotlin.mppconverter.gradle.BuildGradleFileForMultiplatformP
 import org.jetbrains.kotlin.mppconverter.gradle.GradleProjectHelper
 import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
-import org.jetbrains.kotlin.mppconverter.visitor.*
+import org.jetbrains.kotlin.mppconverter.typespecifiyng.acceptExplicitTypeSpecifier
+import org.jetbrains.kotlin.mppconverter.visitor.getFileWithActuals
+import org.jetbrains.kotlin.mppconverter.visitor.getFileWithActualsWithTODOs
+import org.jetbrains.kotlin.mppconverter.visitor.getFileWithExpects
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtScriptInitializer
@@ -38,6 +41,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
         ApplicationManager.getApplication().invokeLater {
             ApplicationManager.getApplication().readAction {
+                // TODO: put repositories getting to function
                 when (gph.buildScriptFileType) {
                     GradleProjectHelper.BuildScriptFileType.KotlinScript -> {
                         val repositoriesCall = project.createTmpKotlinScriptFile(
@@ -65,7 +69,6 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
             ApplicationManager.getApplication().invokeLater {
                 ApplicationManager.getApplication().readAction {
                     setupProject()
-
                     WriteCommandAction.runWriteCommandAction(project) {
                         processFiles()
                     }
@@ -166,49 +169,13 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     }
 
 
-    @Deprecated("Use createMppFolderStructure() and separately create build script file")
-    private fun createStructure() {
-        File(multiplatformProjectDirectory).mkdirs()
-
-        val src = File(multiplatformProjectDirectory, "src").apply { mkdir() }
-
-        val buildGradle = File(multiplatformProjectDirectory, "build.gradle.kts").apply {
-            createNewFile()
-
-            val buildGradleBuilder = BuildGradleFileForMultiplatformProjectConfigurator.Builder()
-            repositories?.let { buildGradleBuilder.repositories(listOf(it)) }
-            dependencies?.let {
-                val deps = it.map { dependency ->
-                    BuildGradleFileForMultiplatformProjectConfigurator.Dependency(dependency, "implementation")
-                }
-
-                buildGradleBuilder.commonMainDependencies(deps)
-                buildGradleBuilder.jvmMainDependencies(deps)
-            }
-
-            writeText(buildGradleBuilder.build().text)
+    private fun importFilesToJvmSources() {
+        File(jvmProjectDirectory, "src/main/kotlin").walkTopDown().filter { it.extension == "kt" }.toList().forEach { curJvmFile ->
+            curJvmFile.copyTo(tmpJvmDirectory)
         }
 
-        val commonMain = File(src, "commonMain").apply { mkdir() }
-        val commonMainSrcFile = File(commonMain, "kotlin").apply {
-            mkdir()
-            commonMainSources = absolutePath
-        }
-        File(commonMainSrcFile, "__jvm").apply { mkdir() }
-
-
-        val jvmMain = File(src, "jvmMain").apply { mkdir() }
-        File(jvmMain, "kotlin").apply {
-            mkdir()
-            jvmMainSources = absolutePath
-        }
-
-        val jsMain = File(src, "jsMain").apply { mkdir() }
-        File(jsMain, "kotlin").apply {
-            mkdir()
-            jsMainSources = absolutePath
-        }
-
+        // add all files to project
+        importProjectFromTestData()
     }
 
     private fun setupProject() {
@@ -216,14 +183,16 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         createTmpDirectories()
         createBuildScriptFile()
 
-        File(jvmProjectDirectory, "src/main/kotlin").walkTopDown().filter { it.extension == "kt" }.toList().forEach { curJvmFile ->
-            curJvmFile.copyTo(tmpCommonDirectory)
+        importFilesToJvmSources()
 
-            // setup mpp project
-            importProjectFromTestData()
+        WriteCommandAction.runWriteCommandAction(project) {
+            project.allKotlinFiles().filter { it.isInJvmSources() }.forEach {
+                it.acceptExplicitTypeSpecifier()
+                it.moveTo(tmpCommonDirectory)
+            }
         }
-    }
 
+    }
 
     private fun moveAllFilesThatDependsOnJvmAndCantBeConvertedToCommon() {
         var fullyJvmDependentFiles = project.allKotlinFiles().filter {
@@ -241,7 +210,6 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     }
 
     private fun processFiles() {
-
         moveAllFilesThatDependsOnJvmAndCantBeConvertedToCommon()
 
         project.allKotlinFiles().filter { it.isInCommonSources() }.forEach { jvmKtFile ->
@@ -307,7 +275,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     }
 
     private fun KtFile.moveTo(dir: String): KtFile {
-        delete()
+        project.allKotlinFiles().find { it === this }!!.delete()
         File("$multiplatformProjectDirectory/${File(virtualFilePath).path.substringAfter(File("project").path)}").delete()
         createDirsAndWriteFile(dir)
 
@@ -334,4 +302,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     private fun KtFile.isInCommonSources(): Boolean =
         File(virtualFilePath).path.contains(File(commonMainSources).path.substringAfter(File(multiplatformProjectDirectory).path))
+
+    private fun KtFile.isInJvmSources(): Boolean =
+        File(virtualFilePath).path.contains(File(jvmMainSources).path.substringAfter(File(multiplatformProjectDirectory).path))
 }

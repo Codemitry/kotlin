@@ -1,19 +1,18 @@
 package org.jetbrains.kotlin.mppconverter
 
-import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiJavaFile
-import com.intellij.psi.PsiManager
-import com.intellij.psi.search.FileTypeIndex
-import com.intellij.psi.search.ProjectScope
+import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
+import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.getReturnTypeReference
 import org.jetbrains.kotlin.idea.util.ifTrue
 import org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.plugins.groovy.GroovyFileType
+import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFile
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory
 import java.io.File
@@ -81,11 +80,11 @@ fun PsiElement.canConvertToCommon(context: BindingContext? = null): Boolean {
         is KtFunction -> {
             if (this.hasModifier(PRIVATE_KEYWORD)) return false
 
-            if (!this.signatureIsResolvable()) return false
+            if (!this.isResolvableSignature()) return false
         }
         is KtProperty -> {
             if (this.hasModifier(PRIVATE_KEYWORD)) return false
-            if (!this.isResolvable()) return false
+            if (!this.isResolvableType()) return false
         }
 
         is KtFile -> {
@@ -96,15 +95,15 @@ fun PsiElement.canConvertToCommon(context: BindingContext? = null): Boolean {
     return true
 }
 
+fun KtProperty.isResolvableType(): Boolean {
+    typeReference?.let { return it.isResolvable() }
+    return resolveToDescriptorIfAny()?.type?.isResolvable() == true
+}
 
-fun KtFunction.signatureIsResolvable(): Boolean {
+fun KtFunction.isResolvableSignature(): Boolean {
     this.receiverTypeReference?.let { if (!it.isResolvable()) return false }
     this.valueParameters.forEach { if (!it.isResolvable()) return false }
     this.getReturnTypeReference()?.let { if (!it.isResolvable()) return false } // if return type declared explicitly
-
-    // TODO: remove body expression check from here
-//    this.bodyExpression?.isResolvable()?.ifFalse { return false }
-//    this.bodyExpression?.getType(analyzeWithContent())?.let { if (it.dependsOnJvm()) return true }
 
     return true
 }
@@ -142,4 +141,27 @@ fun Project.createTmpGroovyFile(content: CharSequence, isPhysical: Boolean = fal
 
 fun Project.createTmpKotlinScriptFile(filename: String = "tmp.kts", content: String): KtFile {
     return KtPsiFactory(this).createFile(filename, content)
+}
+
+/**
+ * @see org.jetbrains.kotlin.js.descriptorUtils.getJetTypeFqName
+ */
+fun KotlinType.getDeepJetTypeFqName(printTypeArguments: Boolean): String {
+    val declaration = requireNotNull(constructor.declarationDescriptor) {
+        "declarationDescriptor is null for constructor = $constructor with ${constructor.javaClass}"
+    }
+    if (declaration is TypeParameterDescriptor) {
+        return StringUtil.join(declaration.upperBounds, { type -> type.getDeepJetTypeFqName(printTypeArguments) }, "&")
+    }
+
+    val typeArguments = arguments
+    val typeArgumentsAsString = if (printTypeArguments && !typeArguments.isEmpty()) {
+        val joinedTypeArguments = StringUtil.join(typeArguments, { projection -> projection.type.getDeepJetTypeFqName(true) }, ", ")
+
+        "<$joinedTypeArguments>"
+    } else {
+        ""
+    }
+
+    return DescriptorUtils.getFqName(declaration).asString() + typeArgumentsAsString
 }

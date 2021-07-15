@@ -83,13 +83,6 @@ class KtResolverVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
     }
 
 
-    private fun KotlinType.isResolvable(): Boolean {
-        if (this.containsError()) return false
-        val descriptor = this.constructor.declarationDescriptor ?: error("declaration descriptor of constructor of KotlinType is null")
-
-        return true
-    }
-
     private fun KtTypeReference.getAbbreviatedTypeOrType(): KotlinType? = getAbbreviatedTypeOrType(analyze())
 
     private fun KtElement.getResolvedCall(): ResolvedCall<out CallableDescriptor>? = getResolvedCall(analyze())
@@ -101,6 +94,13 @@ class KtResolverVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
         return returnCondition(children.mapNotNull { (it as? KtElement)?.accept(visitor, data) })
     }
 
+}
+
+fun KotlinType.isResolvable(): Boolean {
+    if (this.containsError()) return false
+    val descriptor = this.constructor.declarationDescriptor ?: error("declaration descriptor of constructor of KotlinType is null")
+
+    return true
 }
 
 fun KtFile.isResolvable(): Boolean {
