@@ -9,6 +9,7 @@ import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
+import org.jetbrains.kotlin.idea.util.ifFalse
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.bindingContextUtil.getAbbreviatedTypeOrType
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
@@ -64,6 +65,7 @@ class KtResolverVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
 
     override fun visitCallExpression(expression: KtCallExpression, data: Unit?): Boolean {
         val resolvedCall = expression.getResolvedCall() ?: return false
+        resolvedCall.call.valueArgumentList?.isResolvable()?.ifFalse { return false }
         val type = expression.getType() ?: return false
         return type.isResolvable()
     }

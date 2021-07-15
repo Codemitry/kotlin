@@ -2,7 +2,9 @@ package org.jetbrains.kotlin.mppconverter.visitor
 
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
+import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
+import org.jetbrains.kotlin.idea.imports.canResolve
 import org.jetbrains.kotlin.idea.refactoring.fqName.fqName
 import org.jetbrains.kotlin.lexer.KtTokens.DATA_KEYWORD
 import org.jetbrains.kotlin.lexer.KtTokens.EXPECT_KEYWORD
@@ -124,7 +126,7 @@ object KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
     }
 
     fun KtImportList.removeUnresolvableImports() {
-        imports.filter { it.isNotResolvable() }.forEach { it.delete() }
+        imports.filter { !it.canResolve(it.getResolutionFacade()) }.forEach { it.delete() }
     }
 
 }

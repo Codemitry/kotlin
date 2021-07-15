@@ -13,8 +13,6 @@ object KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
     }
 
     override fun visitProperty(property: KtProperty) {
-        super.visitProperty(property)
-
         if (property.isLocal)
             return
 

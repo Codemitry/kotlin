@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.mppconverter.canConvertToCommon
 import org.jetbrains.kotlin.mppconverter.removeInitializer
 import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
+import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid.removeUnresolvableImports
 import org.jetbrains.kotlin.psi.*
 
 object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
@@ -32,6 +33,7 @@ object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
     }
 
     override fun visitProperty(property: KtProperty) {
+        property.addModifier(ACTUAL_KEYWORD)
         property.initializer?.let { initializer ->
             if (initializer.isNotResolvable()) {
                 initializer.replace(createTODOCallExpression(property.project))
@@ -121,6 +123,7 @@ fun KtFile.getFileWithActualsWithTODOs(): KtFile = (this.copy() as KtFile).apply
                 declaration.delete()
         }
     }
+    importList?.removeUnresolvableImports()
 }
 
 fun KtPsiFactory.createCallExpression(text: String): KtCallExpression {
