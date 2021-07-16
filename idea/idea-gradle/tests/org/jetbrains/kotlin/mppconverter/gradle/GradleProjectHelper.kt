@@ -6,16 +6,23 @@
 package org.jetbrains.kotlin.mppconverter.gradle
 
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.runBlocking
 import org.gradle.tooling.GradleConnectionException
 import org.gradle.tooling.GradleConnector
 import org.gradle.tooling.ProjectConnection
 import org.gradle.tooling.ResultHandler
 import org.gradle.tooling.model.GradleProject
+import org.jetbrains.kotlin.mppconverter.gradle.generator.Dependency
+import org.jetbrains.kotlin.mppconverter.gradle.generator.JsTarget
+import org.jetbrains.kotlin.mppconverter.gradle.generator.JvmTarget
+import org.jetbrains.kotlin.mppconverter.gradle.generator.MultiplatformProjectBuildScriptGenerator
 import org.jetbrains.kotlin.mppconverter.gradle.parser.BuildScriptParser
 import org.jetbrains.kotlin.mppconverter.gradle.parser.GroovyBuildScriptParser
 import org.jetbrains.kotlin.mppconverter.gradle.parser.KtsBuildScriptParser
 import java.io.ByteArrayOutputStream
 import java.io.File
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 class GradleProjectHelper(projectRoot: String) {
 
@@ -25,6 +32,7 @@ class GradleProjectHelper(projectRoot: String) {
     private var connection: ProjectConnection? = null
 
     private lateinit var buildScriptParser: BuildScriptParser
+    private lateinit var buildScriptGenerator: MultiplatformProjectBuildScriptGenerator
 
     init {
         if (!this.projectRoot.isDirectory) throw IllegalArgumentException("projectRoot $projectRoot is not directory!")
@@ -36,14 +44,29 @@ class GradleProjectHelper(projectRoot: String) {
             connection = connect()
         }
 
-        buildScriptParser = when (buildScriptFileType) {
-            BuildScriptFileType.KotlinScript -> KtsBuildScriptParser(usingProject, buildScriptFile.absolutePath)
-            BuildScriptFileType.GroovyScript -> GroovyBuildScriptParser(usingProject, buildScriptFile.absolutePath)
+        when (buildScriptFileType) {
+            BuildScriptFileType.KotlinScript -> {
+                buildScriptParser = KtsBuildScriptParser(usingProject, buildScriptFile.absolutePath)
+                buildScriptGenerator = KtsMultiplatformProjectBuildScriptGenerator()
+            }
+            BuildScriptFileType.GroovyScript -> {
+                buildScriptParser = GroovyBuildScriptParser(usingProject, buildScriptFile.absolutePath)
+                // TODO buildScriptGenerator = GroovyMultiplatformProjectBuildScriptGenerator()
+            }
         }
     }
 
-    fun loadDependencies(configuration: String = "implementation", onDependenciesLoaded: (List<String>) -> Unit) {
-        val build = connection?.newBuild() ?: throw IllegalStateException("Illegal state! #connectToProject must be called before #loadDependensies.")
+    fun runGetDependenciesSynchronously(configuration: String = "implementation"): List<Dependency> = runBlocking {
+        getDependenciesSynchronously(configuration)
+    }
+
+    suspend fun getDependenciesSynchronously(configuration: String = "implementation"): List<Dependency> = suspendCoroutine { cont ->
+        loadDependencies(configuration) { cont.resume(it) }
+    }
+
+    fun loadDependencies(configuration: String = "implementation", onDependenciesLoaded: (List<Dependency>) -> Unit) {
+        val build = connection?.newBuild()
+            ?: throw IllegalStateException("Illegal state! #connectToProject must be called before #loadDependensies.")
 
         val swappedOutputStream = ByteArrayOutputStream()
         build.setStandardOutput(swappedOutputStream)
@@ -61,7 +84,28 @@ class GradleProjectHelper(projectRoot: String) {
         })
     }
 
-    fun getRepositoriesSection(): String? = buildScriptParser.getRepositoriesSection()
+
+    fun getBuildScriptFileNameForThisProject(): String = when (buildScriptFileType) {
+        BuildScriptFileType.KotlinScript -> "build.gradle.kts"
+        BuildScriptFileType.GroovyScript -> "build.gradle"
+    }
+
+
+    fun getMultiplatformBuildScriptTextForThisProject(): String {
+        buildScriptParser.getRepositoriesSectionInside()?.let { buildScriptGenerator.setRepositories(it) }
+        buildScriptGenerator.setTargets(
+            JvmTarget(),
+            JsTarget()
+        )
+        buildScriptGenerator.setPlugins(multiplatformPlugin(buildScriptFileType))
+
+        val dependencies = runGetDependenciesSynchronously()
+        buildScriptGenerator.setDependenciesToSourceSet("commonMain", dependencies)
+        buildScriptGenerator.setDependenciesToSourceSet("jvmMain", dependencies)
+        buildScriptGenerator.setDependenciesToSourceSet("jsMain", dependencies)
+
+        return buildScriptGenerator.generate()
+    }
 
     val buildScriptFile: File by lazy {
         connection?.getModel(GradleProject::class.java)?.buildScript?.sourceFile
@@ -99,4 +143,11 @@ class GradleProjectHelper(projectRoot: String) {
         connection?.close() ?: throw IllegalStateException("Illegal state! #connectToProject must be called before #closeConnection.")
     }
 
+}
+
+const val multiplatformPluginVersion = "1.5.10"
+
+fun multiplatformPlugin(buildScript: GradleProjectHelper.BuildScriptFileType): String = when (buildScript) {
+    GradleProjectHelper.BuildScriptFileType.KotlinScript -> "kotlin(\"multiplatform\") version \"$multiplatformPluginVersion\""
+    GradleProjectHelper.BuildScriptFileType.GroovyScript -> "id 'org.jetbrains.kotlin.multiplatform' version '$multiplatformPluginVersion'"
 }

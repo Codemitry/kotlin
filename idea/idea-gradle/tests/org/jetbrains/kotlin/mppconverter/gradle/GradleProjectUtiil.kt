@@ -5,8 +5,10 @@
 
 package org.jetbrains.kotlin.mppconverter.gradle
 
-fun rawDependenciesToList(lines: List<String>, configuration: String): List<String> {
-    val dependencies = mutableListOf<String>()
+import org.jetbrains.kotlin.mppconverter.gradle.generator.Dependency
+
+fun rawDependenciesToList(lines: List<String>, configuration: String): List<Dependency> {
+    val dependencies = mutableListOf<Dependency>()
 
     val firstDepLineIdx = lines.indexOfFirst { it.startsWith(configuration) } + 1
 
@@ -15,10 +17,10 @@ fun rawDependenciesToList(lines: List<String>, configuration: String): List<Stri
     var lineIdx = firstDepLineIdx
     while (!lines[lineIdx].startsWith("\\---")) {
         if (lines[lineIdx].startsWith("+---"))
-            dependencies.add(lines[lineIdx].substringAfter("+--- ").split(" ")[0])
+            dependencies.add(Dependency(lines[lineIdx].substringAfter("+--- ").split(" ")[0], configuration))
         lineIdx++
     }
-    dependencies.add(lines[lineIdx].substringAfter("\\--- ").split(" ")[0])
+    dependencies.add(Dependency(lines[lineIdx].substringAfter("\\--- ").split(" ")[0], configuration))
 
     return dependencies
 }

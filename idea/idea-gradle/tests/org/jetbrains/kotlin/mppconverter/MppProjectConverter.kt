@@ -14,7 +14,6 @@ import org.jetbrains.kotlin.idea.codeInsight.gradle.MultiplePluginVersionGradleI
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.debugger.readAction
 import org.jetbrains.kotlin.idea.test.allKotlinFiles
-import org.jetbrains.kotlin.mppconverter.gradle.BuildGradleFileForMultiplatformProjectConfigurator
 import org.jetbrains.kotlin.mppconverter.gradle.GradleProjectHelper
 import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
@@ -36,27 +35,25 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         val gph = GradleProjectHelper(jvmProjectDirectory)
         gph.connectToProject(project)
 
+        createMppFolderStructure()
+        createTmpDirectories()
+
         ApplicationManager.getApplication().invokeLater {
             ApplicationManager.getApplication().readAction {
-                repositories = gph.getRepositoriesSection()
-            }
-        }
 
-        gph.loadDependencies { dependencies ->
-            this@MppProjectConverter.dependencies = dependencies
+                File(multiplatformProjectDirectory, gph.getBuildScriptFileNameForThisProject()).apply {
+                    createNewFile()
+                    writeText(gph.getMultiplatformBuildScriptTextForThisProject())
+                }
 
-            ApplicationManager.getApplication().invokeLater {
-                ApplicationManager.getApplication().readAction {
-                    setupProject()
-                    WriteCommandAction.runWriteCommandAction(project) {
-                        processFiles()
-                    }
+                setupProject()
+                WriteCommandAction.runWriteCommandAction(project) {
 
+                    processFiles()
+                    gph.closeConnection()
                 }
             }
         }
-
-        gph.closeConnection()
 
     }
 
@@ -84,8 +81,6 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     val tmpCommonDirectory by lazy { "$commonMainSources${File.separator}$tmpDirectoryName" }
     val tmpJvmDirectory by lazy { "$jvmMainSources${File.separator}$tmpDirectoryName" }
 
-    var repositories: String? = null
-    var dependencies: List<String>? = null
 
     private fun createMppFolderStructure() {
         /*
@@ -128,25 +123,6 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         File(tmpJvmDirectory).mkdirs()
     }
 
-    private fun createBuildScriptFile() {
-        val buildScript = File(multiplatformProjectDirectory, "build.gradle.kts").apply {
-            createNewFile()
-
-            val buildGradleBuilder = BuildGradleFileForMultiplatformProjectConfigurator.Builder()
-            repositories?.let { buildGradleBuilder.repositoriesSection(it) }
-            dependencies?.let {
-                val deps = it.map { dependency ->
-                    BuildGradleFileForMultiplatformProjectConfigurator.Dependency(dependency, "implementation")
-                }
-
-                buildGradleBuilder.commonMainDependencies(deps)
-                buildGradleBuilder.jvmMainDependencies(deps)
-            }
-
-            writeText(buildGradleBuilder.build().text)
-        }
-    }
-
 
     private fun importFilesToJvmSources() {
         File(jvmProjectDirectory, "src/main/kotlin").walkTopDown().filter { it.extension == "kt" }.toList().forEach { curJvmFile ->
@@ -158,10 +134,6 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     }
 
     private fun setupProject() {
-        createMppFolderStructure()
-        createTmpDirectories()
-        createBuildScriptFile()
-
         importFilesToJvmSources()
 
         WriteCommandAction.runWriteCommandAction(project) {
@@ -215,7 +187,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
                     true /* try to resolve with JS analyzer */ -> {
                     }
                     else -> {
-                        error("Ooooups... File ${jvmKtFile.name} can be resolved!")
+                        error("Ooooups... File ${jvmKtFile.name} can not be resolved!")
                     }
                 }
 

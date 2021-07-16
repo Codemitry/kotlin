@@ -49,7 +49,7 @@ ${repositories.joinToString("\n") { it.withIndent(1) }}
     override fun sourceSetSection(sourceSet: String): String {
         val dependencies = getDependenciesSectionForSourceSet(sourceSet)
         return """
-$sourceSet by getting${
+val $sourceSet by getting${
             if (dependencies.isEmpty()) "" else """ {
 ${dependencies.withIndent(1)}
 }""".trimIndent()
@@ -63,18 +63,19 @@ ${dependencies.withIndent(1)}
             if (targets.isEmpty()) return ""
 
             return buildString {
-                append(sourceSetSection("commonMain"))
-                append(sourceSetSection("commonTest"))
+                appendLine("sourceSets {")
+                appendLine(sourceSetSection("commonMain").withIndent(1))
+                appendLine(sourceSetSection("commonTest").withIndent(1))
 
                 targets.forEach {
-                    append(sourceSetSection("${it.name}Main"))
-                    append(sourceSetSection("${it.name}Test"))
+                    appendLine(sourceSetSection("${it.name}Main").withIndent(1))
+                    appendLine(sourceSetSection("${it.name}Test").withIndent(1))
                 }
+                appendLine("}")
             }
-
         }
 
-    fun generate(): String = """
+    override fun generate(): String = """
 $pluginsSection
 
 $repositoriesSection

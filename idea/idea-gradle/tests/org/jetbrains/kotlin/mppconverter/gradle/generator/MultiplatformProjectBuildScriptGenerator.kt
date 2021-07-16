@@ -61,6 +61,8 @@ interface MultiplatformProjectBuildScriptGenerator {
     }
 
     fun sourceSetSection(sourceSet: String): String
+    fun generate(): String
+
 
     fun hasSourceSet(sourceSet: String): Boolean = sourceSetsDependencies.containsKey(sourceSet)
     fun hasNotSourceSet(sourceSet: String): Boolean = !hasSourceSet(sourceSet)
