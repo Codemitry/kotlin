@@ -26,12 +26,14 @@ class KtsBuildScriptParser(
             throw IllegalArgumentException("buildScriptPath ($buildScriptPath) is not path to .kts file!")
     }
 
-    override fun getRepositoriesSection(): String? {
-        val repositoriesCall = usingProject.createTmpKotlinScriptFile("build.gradle.kts", buildScriptFile.readText())
+    private fun getRepositoriesCall(): KtCallExpression? {
+        return usingProject.createTmpKotlinScriptFile("build.gradle.kts", buildScriptFile.readText())
             .script?.blockExpression?.children?.filterIsInstance<KtScriptInitializer>()
             ?.filter { it.firstChild is KtCallExpression }
             ?.map { it.firstChild as KtCallExpression }?.find { it.calleeExpression?.text == "repositories" }
-
-        return repositoriesCall?.text
     }
+
+    override fun getRepositoriesSection(): String? = getRepositoriesCall()?.text
+
+    override fun getRepositoriesSectionInside(): String? = getRepositoriesCall()?.lambdaArguments?.first()?.getLambdaExpression()?.bodyExpression?.text
 }

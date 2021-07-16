@@ -7,9 +7,6 @@ package org.jetbrains.kotlin.mppconverter.gradle.parser
 
 import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.mppconverter.createTmpGroovyFile
-import org.jetbrains.kotlin.mppconverter.createTmpKotlinScriptFile
-import org.jetbrains.kotlin.psi.KtCallExpression
-import org.jetbrains.kotlin.psi.KtScriptInitializer
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.path.GrMethodCallExpression
 import java.io.File
 
@@ -28,10 +25,13 @@ class GroovyBuildScriptParser(
             throw IllegalArgumentException("buildScriptPath ($buildScriptPath) is not path to .kts file!")
     }
 
-    override fun getRepositoriesSection(): String? {
-        val repositoriesCall = usingProject.createTmpGroovyFile(buildScriptFile.readText()).children
+    private fun getRepositoriesCall(): GrMethodCallExpression? {
+        return usingProject.createTmpGroovyFile(buildScriptFile.readText()).children
             .filterIsInstance<GrMethodCallExpression>()
             .find { it.invokedExpression.text == "repositories" }
-        return repositoriesCall?.text
     }
+
+    override fun getRepositoriesSection(): String? = getRepositoriesCall()?.text
+
+    override fun getRepositoriesSectionInside(): String? = getRepositoriesCall()?.closureArguments?.first()?.statements?.joinToString("\n")
 }

@@ -12,4 +12,5 @@ interface BuildScriptParser {
      * return section with repositories or null if it is not declared
      */
     fun getRepositoriesSection(): String?
+    fun getRepositoriesSectionInside(): String?
 }
