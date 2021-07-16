@@ -5,8 +5,6 @@
 
 package org.jetbrains.kotlin.mppconverter.gradle.generator
 
-import org.jetbrains.kotlin.mppconverter.gradle.BuildGradleFileForMultiplatformProjectConfigurator.Dependency
-
 interface MultiplatformProjectBuildScriptGenerator {
     val plugins: MutableList<String>
     val targets: MutableList<Target>
@@ -28,6 +26,41 @@ interface MultiplatformProjectBuildScriptGenerator {
 
         sourceSetsDependencies[sourceSet]!!.add(dependency)
     }
+
+    fun setDependenciesToSourceSet(sourceSet: String, dependencies: Collection<Dependency>) {
+        sourceSetsDependencies[sourceSet]?.clear()
+
+        dependencies.forEach { addDependencyToSourceSet(sourceSet, it) }
+    }
+
+    fun setPlugins(plugins: Collection<String>) {
+        this.plugins.clear()
+        this.plugins.addAll(plugins)
+    }
+
+    fun setPlugins(vararg plugins: String) {
+        setPlugins(plugins.toList())
+    }
+
+    fun setTargets(targets: Collection<Target>) {
+        this.targets.clear()
+        this.targets.addAll(targets)
+    }
+
+    fun setTargets(vararg targets: Target) {
+        setTargets(targets.toList())
+    }
+
+    fun setRepositories(repositories: Collection<String>) {
+        this.repositories.clear()
+        this.repositories.addAll(repositories)
+    }
+
+    fun setRepositories(vararg repositories: String) {
+        setRepositories(repositories.toList())
+    }
+
+    fun sourceSetSection(sourceSet: String): String
 
     fun hasSourceSet(sourceSet: String): Boolean = sourceSetsDependencies.containsKey(sourceSet)
     fun hasNotSourceSet(sourceSet: String): Boolean = !hasSourceSet(sourceSet)

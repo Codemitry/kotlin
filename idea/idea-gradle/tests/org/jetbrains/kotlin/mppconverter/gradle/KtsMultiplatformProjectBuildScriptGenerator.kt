@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.mppconverter.gradle
 
+import org.jetbrains.kotlin.mppconverter.gradle.generator.Dependency
 import org.jetbrains.kotlin.mppconverter.gradle.generator.MultiplatformProjectBuildScriptGenerator
 import org.jetbrains.kotlin.mppconverter.gradle.generator.Target
 
@@ -13,14 +14,14 @@ class KtsMultiplatformProjectBuildScriptGenerator : MultiplatformProjectBuildScr
     override val targets = mutableListOf<Target>()
     override val repositories = mutableListOf<String>()
 
-    override val sourceSetsDependencies = mutableMapOf<String, MutableList<BuildGradleFileForMultiplatformProjectConfigurator.Dependency>>()
+    override val sourceSetsDependencies = mutableMapOf<String, MutableList<Dependency>>()
 
     private fun getDependenciesSectionForSourceSet(sourceSet: String): String =
         if (hasNotSourceSet(sourceSet))
             ""
         else """
 dependencies {
-${sourceSetDependencies(sourceSet)!!.joinToString("\n") { "${it.configuration}(\"${it.name}\")".withIndent(1) }}
+${sourceSetDependencies(sourceSet)!!.joinToString("\n") { "${it.configuration}(\"${it.scheme}\")".withIndent(1) }}
 }
         """.trimIndent()
 
@@ -45,39 +46,29 @@ ${repositories.joinToString("\n") { it.withIndent(1) }}
         """.trimIndent()
 
 
+    override fun sourceSetSection(sourceSet: String): String {
+        val dependencies = getDependenciesSectionForSourceSet(sourceSet)
+        return """
+$sourceSet by getting${
+            if (dependencies.isEmpty()) "" else """ {
+${dependencies.withIndent(1)}
+}""".trimIndent()
+        }
+
+                """.trimIndent()
+    }
+
     override val sourceSetsSection: String
         get() {
             if (targets.isEmpty()) return ""
 
             return buildString {
+                append(sourceSetSection("commonMain"))
+                append(sourceSetSection("commonTest"))
+
                 targets.forEach {
-                    val dependenciesMain = getDependenciesSectionForSourceSet("${it.name}Main")
-                    append(
-                        """
-${it.name}Main by getting${
-                            if (dependenciesMain.isEmpty()) "" else """ {
-${dependenciesMain.withIndent(1)}
-}
-
-""".trimIndent()
-                        }
-
-                """.trimIndent()
-                    )
-
-                    val dependenciesTest = getDependenciesSectionForSourceSet("${it.name}Test")
-                    append(
-                        """
-${it.name}Test by getting${
-                            if (dependenciesTest.isEmpty()) "" else """ {
-${dependenciesTest.withIndent(1)}
-}
-
-""".trimIndent()
-                        }
-
-                """.trimIndent()
-                    )
+                    append(sourceSetSection("${it.name}Main"))
+                    append(sourceSetSection("${it.name}Test"))
                 }
             }
 
