@@ -11,8 +11,7 @@ import org.jetbrains.kotlin.mppconverter.gradle.generator.Target
 class KtsBuildScriptGenerator : BuildScriptGenerator {
     override val plugins = mutableListOf<String>()
     override val targets = mutableListOf<Target>()
-
-    // TODO: add repositories
+    override val repositories = mutableListOf<String>()
 
     override val sourceSetsDependencies = mutableMapOf<String, MutableList<BuildGradleFileForMultiplatformProjectConfigurator.Dependency>>()
 
@@ -37,6 +36,13 @@ ${plugins.joinToString("\n") { it.withIndent(1) }}
         get() = if (targets.isEmpty()) "" else """
 ${targets.joinToString("\n")}
     """.trimIndent()
+
+    override val repositoriesSection: String
+        get() = if (repositories.isEmpty()) "" else """
+repositories {
+${repositories.joinToString("\n") { it.withIndent(1) }}
+}
+        """.trimIndent()
 
 
     override val sourceSetsSection: String
@@ -79,6 +85,8 @@ ${dependenciesTest.withIndent(1)}
 
     fun generate(): String = """
 $pluginsSection
+
+$repositoriesSection
 
 kotlin {
 ${targetsSection.withIndent(1)}

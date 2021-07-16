@@ -10,8 +10,7 @@ import org.jetbrains.kotlin.mppconverter.gradle.BuildGradleFileForMultiplatformP
 interface BuildScriptGenerator {
     val plugins: MutableList<String>
     val targets: MutableList<Target>
-
-    // TODO: add repositories
+    val repositories: MutableList<String>
 
     /**
      * format: sourceSet: dependency
@@ -21,6 +20,7 @@ interface BuildScriptGenerator {
     val pluginsSection: String
     val targetsSection: String
     val sourceSetsSection: String
+    val repositoriesSection: String
 
     fun addDependencyToSourceSet(sourceSet: String, dependency: Dependency) {
         if (!sourceSetsDependencies.containsKey(sourceSet))
