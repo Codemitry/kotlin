@@ -7,7 +7,7 @@ package org.jetbrains.kotlin.mppconverter.gradle.generator
 
 import org.jetbrains.kotlin.mppconverter.gradle.BuildGradleFileForMultiplatformProjectConfigurator.Dependency
 
-interface BuildScriptGenerator {
+interface MultiplatformProjectBuildScriptGenerator {
     val plugins: MutableList<String>
     val targets: MutableList<Target>
     val repositories: MutableList<String>

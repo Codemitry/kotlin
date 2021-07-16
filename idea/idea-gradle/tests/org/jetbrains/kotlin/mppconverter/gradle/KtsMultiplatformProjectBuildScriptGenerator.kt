@@ -5,10 +5,10 @@
 
 package org.jetbrains.kotlin.mppconverter.gradle
 
-import org.jetbrains.kotlin.mppconverter.gradle.generator.BuildScriptGenerator
+import org.jetbrains.kotlin.mppconverter.gradle.generator.MultiplatformProjectBuildScriptGenerator
 import org.jetbrains.kotlin.mppconverter.gradle.generator.Target
 
-class KtsBuildScriptGenerator : BuildScriptGenerator {
+class KtsMultiplatformProjectBuildScriptGenerator : MultiplatformProjectBuildScriptGenerator {
     override val plugins = mutableListOf<String>()
     override val targets = mutableListOf<Target>()
     override val repositories = mutableListOf<String>()
