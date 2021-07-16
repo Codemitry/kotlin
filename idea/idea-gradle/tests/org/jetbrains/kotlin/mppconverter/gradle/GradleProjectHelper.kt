@@ -12,10 +12,7 @@ import org.gradle.tooling.GradleConnector
 import org.gradle.tooling.ProjectConnection
 import org.gradle.tooling.ResultHandler
 import org.gradle.tooling.model.GradleProject
-import org.jetbrains.kotlin.mppconverter.gradle.generator.Dependency
-import org.jetbrains.kotlin.mppconverter.gradle.generator.JsTarget
-import org.jetbrains.kotlin.mppconverter.gradle.generator.JvmTarget
-import org.jetbrains.kotlin.mppconverter.gradle.generator.MultiplatformProjectBuildScriptGenerator
+import org.jetbrains.kotlin.mppconverter.gradle.generator.*
 import org.jetbrains.kotlin.mppconverter.gradle.parser.BuildScriptParser
 import org.jetbrains.kotlin.mppconverter.gradle.parser.GroovyBuildScriptParser
 import org.jetbrains.kotlin.mppconverter.gradle.parser.KtsBuildScriptParser

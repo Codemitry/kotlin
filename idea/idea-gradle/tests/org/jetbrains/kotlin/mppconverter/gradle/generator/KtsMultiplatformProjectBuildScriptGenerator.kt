@@ -3,11 +3,7 @@
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
-package org.jetbrains.kotlin.mppconverter.gradle
-
-import org.jetbrains.kotlin.mppconverter.gradle.generator.Dependency
-import org.jetbrains.kotlin.mppconverter.gradle.generator.MultiplatformProjectBuildScriptGenerator
-import org.jetbrains.kotlin.mppconverter.gradle.generator.Target
+package org.jetbrains.kotlin.mppconverter.gradle.generator
 
 class KtsMultiplatformProjectBuildScriptGenerator : MultiplatformProjectBuildScriptGenerator {
     override val plugins = mutableListOf<String>()
