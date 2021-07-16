@@ -5,12 +5,13 @@
 
 package org.jetbrains.kotlin.mppconverter.gradle
 
+@Deprecated("Always generate kts", ReplaceWith("Use org.jetbrains.kotlin.mppconverter.gradle.generator.BuildScriptGenerator"))
 class BuildGradleFileForMultiplatformProjectConfigurator constructor(
     val group: String?,
     val name: String?,
     val version: String?,
 
-    val repositories: List<String>?,
+    val repositoriesSection: String?,
     val plugins: List<String>?,
 
     val commonMainDependencies: List<Dependency>?,
@@ -24,7 +25,7 @@ class BuildGradleFileForMultiplatformProjectConfigurator constructor(
         builder.group,
         builder.name,
         builder.version,
-        builder.repositories,
+        builder.repositoriesSection,
         builder.plugins,
         builder.commonMainDependencies,
         builder.commonTestDependencies,
@@ -38,7 +39,7 @@ class BuildGradleFileForMultiplatformProjectConfigurator constructor(
         var version: String? = null
 
         var plugins: List<String>? = null
-        var repositories: List<String>? = null
+        var repositoriesSection: String? = null
 
         var commonMainDependencies: List<Dependency>? = null
         var commonTestDependencies: List<Dependency>? = null
@@ -51,13 +52,16 @@ class BuildGradleFileForMultiplatformProjectConfigurator constructor(
         fun version(version: String) = apply { this.version = version }
 
         fun plugins(plugins: List<String>) = apply { this.plugins = plugins }
-        fun repositories(repositories: List<String>) = apply { this.repositories = repositories }
+        fun repositoriesSection(repositoriesSection: String) = apply { this.repositoriesSection = repositoriesSection }
 
         fun commonMainDependencies(commonMainDependencies: List<Dependency>) = apply { this.commonMainDependencies = commonMainDependencies }
         fun commonTestDependencies(commonTestDependencies: List<Dependency>) = apply { this.commonTestDependencies = commonTestDependencies }
 
         fun jvmMainDependencies(jvmMainDependencies: List<Dependency>) = apply { this.jvmMainDependencies = jvmMainDependencies }
         fun jvmTestDependencies(jvmTestDependencies: List<Dependency>) = apply { this.jvmTestDependencies = jvmTestDependencies }
+
+//        fun jsMainDependencies(jsMainDependencies: List<Dependency>) = apply { this.jsMainDependencies = jsMainDependencies }
+//        fun jsTestDependencies(jsTestDependencies: List<Dependency>) = apply { this.jsTestDependencies = jsTestDependencies }
         
         fun build() = BuildGradleFileForMultiplatformProjectConfigurator(this)
 
@@ -78,19 +82,25 @@ ${if (group != null) "group = \"${group}\"" else ""}
 ${if (name != null) "name = \"${name}\"" else ""}
 ${if (version != null) "version = \"${version}\"" else ""}
 
-repositories {
-${repositories?.joinToString(System.lineSeparator()) { "\t$it" } ?: ""}
-}
+$repositoriesSection
 
 kotlin {
     jvm {
-        compilations.all {
-            kotlinOptions.jvmTarget = "1.8"
-        }
-//        testRuns["test"].executionTask.configure {
-//            useJUnit()
-//        }
     }
+    
+    js { 
+        browser()  // or nodejs()
+    }
+    
+    
+    targets.all {
+        compilations.all {
+            kotlinOptions {
+                allWarningsAsErrors = true
+            }
+        }
+    }
+    
     sourceSets {
         val commonMain by getting {
             dependencies {
@@ -102,6 +112,7 @@ ${commonMainDependencies?.joinToString(System.lineSeparator()) { "\t\t\t\t${it.c
 ${commonTestDependencies?.joinToString(System.lineSeparator()) { "\t\t\t\t${it.configuration}(\"${it.name}\")" } ?: ""}
             }
         }
+        
         val jvmMain by getting {
             dependencies { 
 ${jvmMainDependencies?.joinToString(System.lineSeparator()) { "\t\t\t\t${it.configuration}(\"${it.name}\")" } ?: ""}
@@ -110,6 +121,15 @@ ${jvmMainDependencies?.joinToString(System.lineSeparator()) { "\t\t\t\t${it.conf
         val jvmTest by getting {
             dependencies {
 ${jvmTestDependencies?.joinToString(System.lineSeparator()) { "\t\t\t\t${it.configuration}(\"${it.name}\")" } ?: ""}
+            }
+        }
+        
+        val jsMain by getting {
+            dependencies { 
+            }
+        }
+        val jsTest by getting {
+            dependencies {
             }
         }
     }

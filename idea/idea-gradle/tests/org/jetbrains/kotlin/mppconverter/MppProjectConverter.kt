@@ -22,10 +22,7 @@ import org.jetbrains.kotlin.mppconverter.typespecifiyng.acceptExplicitTypeSpecif
 import org.jetbrains.kotlin.mppconverter.visitor.getFileWithActuals
 import org.jetbrains.kotlin.mppconverter.visitor.getFileWithActualsWithTODOs
 import org.jetbrains.kotlin.mppconverter.visitor.getFileWithExpects
-import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.psi.KtScriptInitializer
-import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.path.GrMethodCallExpression
 import org.junit.Test
 import java.io.File
 
@@ -37,29 +34,11 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         assertGradleOneModuleProjectStructure()
 
         val gph = GradleProjectHelper(jvmProjectDirectory)
-        gph.connectToProject()
+        gph.connectToProject(project)
 
         ApplicationManager.getApplication().invokeLater {
             ApplicationManager.getApplication().readAction {
-                // TODO: put repositories getting to function
-                when (gph.buildScriptFileType) {
-                    GradleProjectHelper.BuildScriptFileType.KotlinScript -> {
-                        val repositoriesCall = project.createTmpKotlinScriptFile(
-                            "build.gradle.kts",
-                            gph.buildScriptFile.readText()
-                        ).script?.blockExpression?.children?.filterIsInstance<KtScriptInitializer>()
-                            ?.filter { it.firstChild is KtCallExpression }
-                            ?.map { it.firstChild as KtCallExpression }?.find { it.calleeExpression?.text == "repositories" }
-
-                        repositories = repositoriesCall?.lambdaArguments?.first()?.getLambdaExpression()?.bodyExpression?.text
-                    }
-                    GradleProjectHelper.BuildScriptFileType.GroovyScript -> {
-                        val repositoriesCall = project.createTmpGroovyFile(gph.buildScriptFile.readText()).children
-                            .filterIsInstance<GrMethodCallExpression>()
-                            .find { it.invokedExpression.text == "repositories" }
-                        repositories = repositoriesCall?.closureArguments?.first()?.statements?.joinToString("\n") { it.text }
-                    }
-                }
+                repositories = gph.getRepositoriesSection()
             }
         }
 
@@ -154,7 +133,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
             createNewFile()
 
             val buildGradleBuilder = BuildGradleFileForMultiplatformProjectConfigurator.Builder()
-            repositories?.let { buildGradleBuilder.repositories(listOf(it)) }
+            repositories?.let { buildGradleBuilder.repositoriesSection(it) }
             dependencies?.let {
                 val deps = it.map { dependency ->
                     BuildGradleFileForMultiplatformProjectConfigurator.Dependency(dependency, "implementation")

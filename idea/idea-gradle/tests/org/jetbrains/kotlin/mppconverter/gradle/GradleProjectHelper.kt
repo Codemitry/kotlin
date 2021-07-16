@@ -5,11 +5,15 @@
 
 package org.jetbrains.kotlin.mppconverter.gradle
 
+import com.intellij.openapi.project.Project
 import org.gradle.tooling.GradleConnectionException
 import org.gradle.tooling.GradleConnector
 import org.gradle.tooling.ProjectConnection
 import org.gradle.tooling.ResultHandler
 import org.gradle.tooling.model.GradleProject
+import org.jetbrains.kotlin.mppconverter.gradle.parser.BuildScriptParser
+import org.jetbrains.kotlin.mppconverter.gradle.parser.GroovyBuildScriptParser
+import org.jetbrains.kotlin.mppconverter.gradle.parser.KtsBuildScriptParser
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -20,16 +24,22 @@ class GradleProjectHelper(projectRoot: String) {
     private var connector: GradleConnector? = null
     private var connection: ProjectConnection? = null
 
+    private lateinit var buildScriptParser: BuildScriptParser
+
     init {
         if (!this.projectRoot.isDirectory) throw IllegalArgumentException("projectRoot $projectRoot is not directory!")
     }
 
-    fun connectToProject() {
+    fun connectToProject(usingProject: Project) {
         connector = GradleConnector.newConnector().apply {
             forProjectDirectory(projectRoot)
             connection = connect()
         }
 
+        buildScriptParser = when (buildScriptFileType) {
+            BuildScriptFileType.KotlinScript -> KtsBuildScriptParser(usingProject, buildScriptFile.absolutePath)
+            BuildScriptFileType.GroovyScript -> GroovyBuildScriptParser(usingProject, buildScriptFile.absolutePath)
+        }
     }
 
     fun loadDependencies(configuration: String = "implementation", onDependenciesLoaded: (List<String>) -> Unit) {
@@ -50,6 +60,8 @@ class GradleProjectHelper(projectRoot: String) {
             }
         })
     }
+
+    fun getRepositoriesSection(): String? = buildScriptParser.getRepositoriesSection()
 
     val buildScriptFile: File by lazy {
         connection?.getModel(GradleProject::class.java)?.buildScript?.sourceFile
