@@ -33,5 +33,5 @@ class GroovyBuildScriptParser(
 
     override fun getRepositoriesSection(): String? = getRepositoriesCall()?.text
 
-    override fun getRepositoriesSectionInside(): String? = getRepositoriesCall()?.closureArguments?.first()?.statements?.joinToString("\n")
+    override fun getRepositoriesSectionInside(): String? = getRepositoriesCall()?.closureArguments?.first()?.statements?.joinToString("\n") { it.text }
 }

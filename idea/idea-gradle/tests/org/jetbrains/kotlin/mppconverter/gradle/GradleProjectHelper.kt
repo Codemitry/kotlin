@@ -48,7 +48,7 @@ class GradleProjectHelper(projectRoot: String) {
             }
             BuildScriptFileType.GroovyScript -> {
                 buildScriptParser = GroovyBuildScriptParser(usingProject, buildScriptFile.absolutePath)
-                // TODO buildScriptGenerator = GroovyMultiplatformProjectBuildScriptGenerator()
+                buildScriptGenerator = GroovyMultiplatformProjectBuildScriptGenerator()
             }
         }
     }
