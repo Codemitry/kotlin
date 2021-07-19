@@ -180,6 +180,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
                 // create here jvm/js files with actuals
                 when {
                     jvmKtFile.isResolvableWithJvmAnalyzer() -> {
+                        actualFile.name = "${actualFile.name.nameWithoutExtension()}Jvm.${actualFile.name.extension()}"
                         actualFile.createDirsAndWriteFile("${jvmMainSources}/${actualFile.packageToRelativePath()}")
                         actualWithTODOsFile.createDirsAndWriteFile("${jsMainSources}/${actualWithTODOsFile.packageToRelativePath()}")
 
@@ -256,4 +257,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     private fun KtFile.isInJvmSources(): Boolean =
         File(virtualFilePath).path.contains(File(jvmMainSources).path.substringAfter(File(multiplatformProjectDirectory).path))
+
+    private fun String.nameWithoutExtension(): String = substringBeforeLast(".")
+    private fun String.extension(): String = substringAfterLast(".")
 }
