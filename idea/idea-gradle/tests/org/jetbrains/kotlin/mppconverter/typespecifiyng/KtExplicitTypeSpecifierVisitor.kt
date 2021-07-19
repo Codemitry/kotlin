@@ -10,14 +10,19 @@ import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.project.builtIns
 import org.jetbrains.kotlin.mppconverter.getDeepJetTypeFqName
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.resolve.bindingContextUtil.getAbbreviatedTypeOrType
-import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 
 object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
+
     override fun visitProperty(property: KtProperty) {
         super.visitProperty(property)
 
         if (property.typeReference != null) return
+
+        if (property.delegateExpressionOrInitializer is KtObjectLiteralExpression)
+            return
+        if (property.getter?.initializer is KtObjectLiteralExpression)
+            return
 
         val fqTypeName = property.resolveToDescriptorIfAny()?.type?.getDeepJetTypeFqName(true)
             ?: error("null in specifying property type in explicitTypeSpecifier")
@@ -30,6 +35,9 @@ object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
 
         if (function.typeReference != null) return
 
+        if (function.initializer is KtObjectLiteralExpression)
+            return
+
         val fqReturnTypeName = function.resolveToDescriptorIfAny()?.returnType?.getDeepJetTypeFqName(true)
             ?: error("null in specifying function type in explicitTypeSpecifier")
         val typeReference = KtPsiFactory(function).createType(fqReturnTypeName)
@@ -38,46 +46,44 @@ object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
 
 
     override fun visitObjectLiteralExpression(expression: KtObjectLiteralExpression) {
+        super.visitObjectLiteralExpression(expression)
 
-        val objectType = expression.getTypeBySuper()?.getDeepJetTypeFqName(true)?.let { KtPsiFactory(expression).createType(it) }
+        var property: KtProperty? = null
+        var function: KtNamedFunction? = null
 
         when (expression.context) {
             is KtProperty -> {
-                val property = expression.context as KtProperty
-                if (property.typeReference == null) {
-                    property.typeReference = objectType
-                }
+                property = expression.context as KtProperty
             }
             is KtPropertyAccessor -> {
-                val property = (expression.context as KtPropertyAccessor).property
-                if (property.typeReference == null) {
-                    property.typeReference = objectType
-                }
+                property = (expression.context as KtPropertyAccessor).property
             }
             is KtPropertyDelegate -> {
-                val property = (expression.context as KtPropertyDelegate).context as KtProperty
-                if (property.typeReference == null) {
-                    property.typeReference = objectType
-                }
+                property = (expression.context as KtPropertyDelegate).context as KtProperty
             }
-            is KtFunction -> {
-                val function = expression.context as KtFunction
-                if (function.typeReference == null) {
-                    function.typeReference = objectType
-                }
+            is KtNamedFunction -> {
+                function = expression.context as KtNamedFunction
+                if (function.isLocal || function.isPrivate())
+                    return
             }
         }
 
-        super.visitObjectLiteralExpression(expression)
+        if (property?.isLocal == true || property?.isPrivate() == true)
+            return
+
+        val objectType = when {
+            property != null -> property.resolveToDescriptorIfAny()?.returnType ?: error("Type of property has not resolved! (Explicit Type Specifier)")
+            function != null -> function.resolveToDescriptorIfAny()?.returnType ?: error("Type of function has not resolved! (Explicit Type Specifier)")
+            else -> error("property & function is null in Explicit Type Specifier")
+        }
+
+        val typeReference = KtPsiFactory(expression).createType(objectType.getDeepJetTypeFqName(true))
+
+        property?.let { if (it.typeReference == null) it.typeReference = typeReference }
+        function?.let { if (it.typeReference == null) it.typeReference = typeReference }
+
     }
 
-}
-
-fun KtObjectLiteralExpression.getTypeBySuper(): KotlinType? = when {
-    objectDeclaration.superTypeListEntries.isEmpty() -> builtIns.anyType
-    objectDeclaration.superTypeListEntries.size > 1 -> builtIns.anyType
-    objectDeclaration.superTypeListEntries.size == 1 -> objectDeclaration.superTypeListEntries.first().typeReference?.getAbbreviatedTypeOrType(analyze())
-    else -> null
 }
 
 fun KtFile.acceptExplicitTypeSpecifier() = this.accept(KtExplicitTypeSpecifierVisitor)

@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
@@ -12,6 +13,7 @@ import org.jetbrains.kotlin.mppconverter.canConvertToCommon
 import org.jetbrains.kotlin.mppconverter.createKtParameterFromProperty
 import org.jetbrains.kotlin.mppconverter.createKtPropertyWithoutInitializer
 import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
+import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid.removeUnresolvableImports
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.isPropertyParameter
@@ -134,7 +136,16 @@ object KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
 private fun KtDeclaration.makeExpect() = accept(KtExpectMakerVisitorVoid)
 
 fun KtFile.getFileWithExpects(): KtFile = (this.copy() as KtFile).apply {
-    declarations.filter { it.isNotResolvable() && it.canConvertToCommon() }.forEach { it.makeExpect() }
-    declarations.filter { !it.canConvertToCommon() }.forEach { it.delete() }
+
+    declarations.filter { it.isNotResolvable() }.forEach {
+        if (it.canConvertToCommon())
+            it.makeExpect()
+        else
+            it.delete()
+    }
+
+//    declarations.filter { !it.canConvertToCommon() }.forEach {
+//        it.delete()
+//    }
     importList?.removeUnresolvableImports()
 }

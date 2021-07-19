@@ -63,7 +63,8 @@ private fun KtDeclaration.makeActual() {
 fun KtFile.getFileWithActuals(): KtFile = (this.copy() as KtFile).apply {
     for (declaration in declarations) {
         if (declaration.isResolvable()) {
-            declaration.delete()
+            if (declaration.canConvertToCommon()) // remove duplicates with common. This way let leave private declarations
+                declaration.delete()
         } else {
             if (declaration.canConvertToCommon())
                 declaration.makeActual()

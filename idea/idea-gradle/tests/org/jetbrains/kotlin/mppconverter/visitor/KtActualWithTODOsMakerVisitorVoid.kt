@@ -34,9 +34,9 @@ object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
 
     override fun visitProperty(property: KtProperty) {
         property.addModifier(ACTUAL_KEYWORD)
-        property.initializer?.let { initializer ->
-            if (initializer.isNotResolvable()) {
-                initializer.replace(createTODOCallExpression(property.project))
+        property.delegateExpressionOrInitializer?.let { expression ->
+            if (expression.isNotResolvable()) {
+                expression.replace(createTODOCallExpression(property.project))
             }
         }
 
@@ -115,7 +115,8 @@ private fun KtDeclaration.makeActualWithTODOs() {
 fun KtFile.getFileWithActualsWithTODOs(): KtFile = (this.copy() as KtFile).apply {
     for (declaration in declarations) {
         if (declaration.isResolvable()) {
-            declaration.delete()
+            if (declaration.canConvertToCommon()) // remove duplicates with common. This way let leave private declarations
+                declaration.delete()
         } else {
             if (declaration.canConvertToCommon())
                 declaration.makeActualWithTODOs()
