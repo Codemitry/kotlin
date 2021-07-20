@@ -16,6 +16,7 @@ import org.jetbrains.kotlin.mppconverter.gradle.generator.*
 import org.jetbrains.kotlin.mppconverter.gradle.parser.BuildScriptParser
 import org.jetbrains.kotlin.mppconverter.gradle.parser.GroovyBuildScriptParser
 import org.jetbrains.kotlin.mppconverter.gradle.parser.KtsBuildScriptParser
+import org.jetbrains.kotlin.util.collectionUtils.concat
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.coroutines.resume
@@ -76,7 +77,7 @@ class GradleProjectHelper(projectRoot: String) {
             }
 
             override fun onFailure(e: GradleConnectionException?) {
-                println("failure on get dependencies for project: $e")
+                error("failure on get dependencies for project: $e")
             }
         })
     }
@@ -96,7 +97,12 @@ class GradleProjectHelper(projectRoot: String) {
         )
         buildScriptGenerator.setPlugins(multiplatformPlugin(buildScriptFileType))
 
-        val dependencies = runGetDependenciesSynchronously()
+        val dependencies = runGetDependenciesSynchronously("implementation")
+            .concat(runGetDependenciesSynchronously("compileOnly"))
+            .concat(runGetDependenciesSynchronously("runtimeOnly"))
+            .concat(runGetDependenciesSynchronously("api"))!!
+            .toList()
+
         buildScriptGenerator.setDependenciesToSourceSet("commonMain", dependencies)
         buildScriptGenerator.setDependenciesToSourceSet("jvmMain", dependencies)
         buildScriptGenerator.setDependenciesToSourceSet("jsMain", dependencies)

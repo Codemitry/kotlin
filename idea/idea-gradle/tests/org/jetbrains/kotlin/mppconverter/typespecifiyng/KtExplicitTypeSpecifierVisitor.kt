@@ -5,12 +5,11 @@
 
 package org.jetbrains.kotlin.mppconverter.typespecifiyng
 
-import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
-import org.jetbrains.kotlin.idea.project.builtIns
 import org.jetbrains.kotlin.mppconverter.getDeepJetTypeFqName
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.isPrivate
+import org.jetbrains.kotlin.types.KotlinType
 
 object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
 
@@ -24,9 +23,7 @@ object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
         if (property.getter?.initializer is KtObjectLiteralExpression)
             return
 
-        val fqTypeName = property.resolveToDescriptorIfAny()?.type?.getDeepJetTypeFqName(true)
-            ?: error("null in specifying property type in explicitTypeSpecifier")
-        val typeReference = KtPsiFactory(property).createType(fqTypeName)
+        val typeReference = property.resolveToDescriptorIfAny()?.type?.let { KtPsiFactory(property).createFqType(it) }
         property.typeReference = typeReference
     }
 
@@ -38,9 +35,7 @@ object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
         if (function.initializer is KtObjectLiteralExpression)
             return
 
-        val fqReturnTypeName = function.resolveToDescriptorIfAny()?.returnType?.getDeepJetTypeFqName(true)
-            ?: error("null in specifying function type in explicitTypeSpecifier")
-        val typeReference = KtPsiFactory(function).createType(fqReturnTypeName)
+        val typeReference = function.resolveToDescriptorIfAny()?.returnType?.let { KtPsiFactory(function).createFqType(it) }
         function.typeReference = typeReference
     }
 
@@ -74,16 +69,21 @@ object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
         val objectType = when {
             property != null -> property.resolveToDescriptorIfAny()?.returnType ?: error("Type of property has not resolved! (Explicit Type Specifier)")
             function != null -> function.resolveToDescriptorIfAny()?.returnType ?: error("Type of function has not resolved! (Explicit Type Specifier)")
-            else -> error("property & function is null in Explicit Type Specifier")
+            else -> return // expression may be not assignable
         }
 
-        val typeReference = KtPsiFactory(expression).createType(objectType.getDeepJetTypeFqName(true))
+        val typeReference = KtPsiFactory(expression).createFqType(objectType)
 
         property?.let { if (it.typeReference == null) it.typeReference = typeReference }
         function?.let { if (it.typeReference == null) it.typeReference = typeReference }
 
     }
 
+
+    private fun KtPsiFactory.createFqType(type: KotlinType): KtTypeReference {
+        val fqReturnTypeName = type.getDeepJetTypeFqName(true) + if (type.isMarkedNullable) "?" else ""
+        return createType(fqReturnTypeName)
+    }
 }
 
 fun KtFile.acceptExplicitTypeSpecifier() = this.accept(KtExplicitTypeSpecifierVisitor)
