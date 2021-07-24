@@ -1,10 +1,10 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
 import org.jetbrains.kotlin.lexer.KtTokens.*
-import org.jetbrains.kotlin.mppconverter.canConvertToCommon
 import org.jetbrains.kotlin.mppconverter.removeInitializer
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 
 object KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
 
@@ -61,12 +61,12 @@ private fun KtDeclaration.makeActual() {
 }
 
 fun KtFile.getFileWithActuals(): KtFile = (this.copy() as KtFile).apply {
-    for (declaration in declarations) {
+    declarations.forEach { declaration ->
+
         if (declaration.isResolvable()) {
-            if (declaration.canConvertToCommon()) // remove duplicates with common. This way let leave private declarations
-                declaration.delete()
+            if (!declaration.isPrivate()) declaration.delete() // remove duplicates with common. This way let leave private declarations
         } else {
-            if (declaration.canConvertToCommon())
+            if (declaration.isExpectizingAllowed())
                 declaration.makeActual()
         }
     }

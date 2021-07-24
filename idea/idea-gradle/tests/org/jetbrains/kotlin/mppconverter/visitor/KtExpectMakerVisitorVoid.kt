@@ -16,6 +16,7 @@ import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid.removeUnresolvableImports
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 import org.jetbrains.kotlin.psi.psiUtil.isPropertyParameter
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
@@ -137,15 +138,24 @@ private fun KtDeclaration.makeExpect() = accept(KtExpectMakerVisitorVoid)
 
 fun KtFile.getFileWithExpects(): KtFile = (this.copy() as KtFile).apply {
 
-    declarations.filter { it.isNotResolvable() }.forEach {
-        if (it.canConvertToCommon())
-            it.makeExpect()
-        else
-            it.delete()
+    declarations.forEach {
+        if (it.isResolvable()) {
+            if (it.isPrivate())
+                /* TODO replace it with extension in future */ ;
+        } else {
+            if (it.isExpectizingAllowed())
+                it.makeExpect()
+            else
+                it.delete()
+        }
     }
 
-//    declarations.filter { !it.canConvertToCommon() }.forEach {
-//        it.delete()
+//    declarations.filter { it.isNotResolvable() }.forEach {
+//        if (it.canConvertToCommon())
+//            it.makeExpect()
+//        else
+//            it.delete()
 //    }
+
     importList?.removeUnresolvableImports()
 }

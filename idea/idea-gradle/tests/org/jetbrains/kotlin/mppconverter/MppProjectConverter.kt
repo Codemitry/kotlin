@@ -9,6 +9,9 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
 import org.jetbrains.kotlin.idea.codeInsight.gradle.MultiplePluginVersionGradleImportingTestCase
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
@@ -21,7 +24,9 @@ import org.jetbrains.kotlin.mppconverter.typespecifiyng.acceptExplicitTypeSpecif
 import org.jetbrains.kotlin.mppconverter.visitor.getFileWithActuals
 import org.jetbrains.kotlin.mppconverter.visitor.getFileWithActualsWithTODOs
 import org.jetbrains.kotlin.mppconverter.visitor.getFileWithExpects
+import org.jetbrains.kotlin.mppconverter.visitor.isExpectizingDenied
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 import org.junit.Test
 import java.io.File
 
@@ -51,6 +56,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
                     processFiles()
                     gph.closeConnection()
+                    commitVirtualProjectFilesToPhysical()
                 }
             }
         }
@@ -77,9 +83,17 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     lateinit var jvmMainSources: String
     lateinit var jsMainSources: String
 
+    lateinit var virtualMultiplatformProjectDirectory: VirtualFile
+    lateinit var virtualCommonMainSources: VirtualFile
+    lateinit var virtualJvmMainSources: VirtualFile
+    lateinit var virtualJsMainSources: VirtualFile
+
     val tmpDirectoryName = "__tmp"
     val tmpCommonDirectory by lazy { "$commonMainSources${File.separator}$tmpDirectoryName" }
     val tmpJvmDirectory by lazy { "$jvmMainSources${File.separator}$tmpDirectoryName" }
+
+    lateinit var virtualTmpCommonDirectory: VirtualFile
+    lateinit var virtualTmpJvmDirectory: VirtualFile
 
 
     private fun createMppFolderStructure() {
@@ -125,12 +139,33 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
 
     private fun importFilesToJvmSources() {
-        File(jvmProjectDirectory, "src/main/kotlin").walkTopDown().filter { it.extension == "kt" }.toList().forEach { curJvmFile ->
-            curJvmFile.copyTo(tmpJvmDirectory)
-        }
-
         // add all files to project
         importProjectFromTestData()
+
+        virtualMultiplatformProjectDirectory = LocalFileSystem.getInstance().findFileByIoFile(File(projectPath))!!
+
+        virtualCommonMainSources =
+            virtualMultiplatformProjectDirectory.findChild("src")!!.findChild("commonMain")!!.findChild("kotlin")!!
+        virtualJvmMainSources = virtualMultiplatformProjectDirectory.findChild("src")!!.findChild("jvmMain")!!.findChild("kotlin")!!
+        virtualJsMainSources = virtualMultiplatformProjectDirectory.findChild("src")!!.findChild("jsMain")!!.findChild("kotlin")!!
+
+
+        WriteCommandAction.runWriteCommandAction(project) {
+            virtualCommonMainSources.createChildDirectory(this, tmpDirectoryName)
+            virtualJvmMainSources.createChildDirectory(this, tmpDirectoryName)
+
+            virtualTmpCommonDirectory = virtualCommonMainSources.findChild(tmpDirectoryName)!!
+
+            virtualTmpJvmDirectory = virtualJvmMainSources.findChild(tmpDirectoryName)!!
+
+            File(jvmProjectDirectory, "src/main/kotlin").walkTopDown().filter { it.extension == "kt" }.toList().forEach { curJvmFile ->
+
+                LocalFileSystem.getInstance().findFileByPath(curJvmFile.path)!!.copy(this, virtualTmpJvmDirectory, curJvmFile.name)
+//            curJvmFile.copyTo(tmpJvmDirectory)
+            }
+        }
+
+
     }
 
     private fun setupProject() {
@@ -139,7 +174,8 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         WriteCommandAction.runWriteCommandAction(project) {
             project.allKotlinFiles().filter { it.isInJvmSources() }.forEach {
                 it.acceptExplicitTypeSpecifier()
-                it.moveTo(tmpCommonDirectory)
+                it.virtualFile.move(this, virtualTmpCommonDirectory)
+//                it.moveTo(tmpCommonDirectory)
             }
         }
 
@@ -152,7 +188,9 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
         while (fullyJvmDependentFiles.isNotEmpty()) {
             fullyJvmDependentFiles.forEach {
-                it.moveTo("$jvmMainSources/${it.packageToRelativePath()}")
+                VfsUtil.createDirectoryIfMissing(virtualJvmMainSources.path + File.separator + it.packageToRelativePath())
+                it.virtualFile.move(this, virtualJvmMainSources.findFileByRelativePath(it.packageToRelativePath())!!)
+//                it.moveTo("$jvmMainSources/${it.packageToRelativePath()}")
             }
 
             fullyJvmDependentFiles = project.allKotlinFiles()
@@ -167,37 +205,62 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
             if (jvmKtFile.isResolvable()) {
                 // the file is fully resolvable with common-analyze
-                jvmKtFile.moveTo("${commonMainSources}/${jvmKtFile.packageToRelativePath()}")
+                VfsUtil.createDirectoryIfMissing(virtualCommonMainSources.path + File.separator + jvmKtFile.packageToRelativePath())
+                jvmKtFile.virtualFile.move(this, virtualCommonMainSources.findFileByRelativePath(jvmKtFile.packageToRelativePath())!!)
+//                jvmKtFile.moveTo("${commonMainSources}/${jvmKtFile.packageToRelativePath()}")
             } else {
-                // create here common file with expects
-                val expectFile = jvmKtFile.getFileWithExpects()
-                expectFile.createDirsAndWriteFile("${commonMainSources}/${expectFile.packageToRelativePath()}")
 
-                val actualFile = jvmKtFile.getFileWithActuals()
-                val actualWithTODOsFile = jvmKtFile.getFileWithActualsWithTODOs()
+                if (jvmKtFile.declarations.all { it.isPrivate() || it.isExpectizingDenied() }) {
+                    VfsUtil.createDirectoryIfMissing(virtualJvmMainSources.path + File.separator + jvmKtFile.packageToRelativePath())
+                    jvmKtFile.virtualFile.move(this, virtualJvmMainSources.findFileByRelativePath(jvmKtFile.packageToRelativePath())!!)
+//                    jvmKtFile.moveTo("${jvmMainSources}/${jvmKtFile.packageToRelativePath()}")
+                } else {
 
 
-                // create here jvm/js files with actuals
-                when {
-                    jvmKtFile.isResolvableWithJvmAnalyzer() -> {
-                        actualFile.name = "${actualFile.name.nameWithoutExtension()}Jvm.${actualFile.name.extension()}"
-                        actualFile.createDirsAndWriteFile("${jvmMainSources}/${actualFile.packageToRelativePath()}")
-                        actualWithTODOsFile.createDirsAndWriteFile("${jsMainSources}/${actualWithTODOsFile.packageToRelativePath()}")
+                    // create here common file with expects
+                    val expectFile = jvmKtFile.getFileWithExpects()
+                    VfsUtil.createDirectories(virtualCommonMainSources.path + File.separator + expectFile.packageToRelativePath())
+                    // FIXME: 7/23/2021  
+                    // expect file - virtual file is null may be
+                    expectFile.virtualFile.move(this, virtualCommonMainSources.findFileByRelativePath(expectFile.packageToRelativePath())!!)
+//                    expectFile.createDirsAndWriteFile("${commonMainSources}/${expectFile.packageToRelativePath()}")
 
+                    val actualFile = jvmKtFile.getFileWithActuals()
+                    val actualWithTODOsFile = jvmKtFile.getFileWithActualsWithTODOs()
+
+
+                    // create here jvm/js files with actuals
+                    when {
+                        jvmKtFile.isResolvableWithJvmAnalyzer() -> {
+                            actualFile.name = "${actualFile.name.nameWithoutExtension()}Jvm.${actualFile.name.extension()}"
+
+                            VfsUtil.createDirectories(virtualJvmMainSources.path + File.separator + actualFile.packageToRelativePath())
+                            actualFile.virtualFile.move(this, virtualJvmMainSources.findFileByRelativePath(actualFile.packageToRelativePath())!!)
+//                            actualFile.createDirsAndWriteFile("${jvmMainSources}/${actualFile.packageToRelativePath()}")
+
+                            VfsUtil.createDirectories(virtualJsMainSources.path + File.separator + actualWithTODOsFile.packageToRelativePath())
+                            actualWithTODOsFile.virtualFile.move(this, virtualJsMainSources.findFileByRelativePath(actualWithTODOsFile.packageToRelativePath())!!)
+                            actualWithTODOsFile.createDirsAndWriteFile("${jsMainSources}/${actualWithTODOsFile.packageToRelativePath()}")
+
+                        }
+                        true /* try to resolve with JS analyzer */ -> {
+                        }
+                        else -> {
+                            error("Ooooups... File ${jvmKtFile.name} can not be resolved!")
+                        }
                     }
-                    true /* try to resolve with JS analyzer */ -> {
-                    }
-                    else -> {
-                        error("Ooooups... File ${jvmKtFile.name} can not be resolved!")
-                    }
+
+                    virtualTmpCommonDirectory.findChild(jvmKtFile.name)!!.delete(this)
                 }
 
             }
 
-            File(tmpCommonDirectory, jvmKtFile.name).delete()
+//            File(tmpCommonDirectory, jvmKtFile.name).delete()
         }
-        File(tmpCommonDirectory).delete()
-        File(tmpJvmDirectory).delete()
+        virtualTmpCommonDirectory.delete(this)
+        virtualTmpJvmDirectory.delete(this)
+//        File(tmpCommonDirectory).delete()
+//        File(tmpJvmDirectory).delete()
     }
 
 
@@ -226,6 +289,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         return File(multiplatformProjectDirectory)
     }
 
+    @Deprecated("Work with VFS")
     private fun KtFile.moveTo(dir: String): KtFile {
         project.allKotlinFiles().find { it === this }!!.delete()
         File("$multiplatformProjectDirectory/${File(virtualFilePath).path.substringAfter(File("project").path)}").delete()
@@ -234,23 +298,53 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         return addKtFileToProject("${dir}/${name}")
     }
 
+    @Deprecated("Work with VFS")
     private fun KtFile.remove() {
         delete()
         File("$multiplatformProjectDirectory/${File(virtualFilePath).path.substringAfter(File("project").path)}").delete()
     }
 
+    @Deprecated("Work with VFS")
     private fun KtFile.copyTo(dir: String): KtFile {
         createDirsAndWriteFile(dir)
         return addKtFileToProject("${dir}/${name}")
     }
 
     private fun KtFile.isResolvableWithJvmAnalyzer(): Boolean {
-        val jvmSourceFile = copyTo(tmpJvmDirectory)
-        val isResolvedWithJvmAnalyzer = jvmSourceFile.isResolvable()
-        jvmSourceFile.remove()
+        val oldDir = virtualFile.directory()
+        virtualFile.move(this, virtualTmpJvmDirectory)
+        val isResolvedWithJvmAnalyzer = isResolvable()
+        virtualFile.move(this, oldDir)
 
         return isResolvedWithJvmAnalyzer
     }
+
+    private fun commitVirtualProjectFilesToPhysical() {
+        File(multiplatformProjectDirectory).walkBottomUp().forEach { it.delete() }
+        val projectFile = LocalFileSystem.getInstance().findFileByIoFile(File(projectPath)) ?: error("project path is null")
+        projectFile.walkRecursivelyDownTop {
+            val dir = multiplatformProjectDirectory + it.directory().path.substringAfter(projectPath)
+            if (it.isDirectory)
+                File(dir).mkdirs()
+            else
+                File(dir, it.name).apply {
+                    if (!parentFile.exists())
+                        parentFile.mkdirs()
+                    createNewFile()
+                    writeText(VfsUtil.virtualToIoFile(it).readText())
+                }
+        }
+    }
+
+    private fun VirtualFile.directory(): VirtualFile = if (isDirectory) this else parent
+
+    private fun VirtualFile.walkRecursivelyDownTop(job: (VirtualFile) -> Unit) {
+        children.forEach {
+            job(it)
+            it.walkRecursivelyDownTop(job)
+        }
+    }
+
 
     private fun KtFile.isInCommonSources(): Boolean =
         File(virtualFilePath).path.contains(File(commonMainSources).path.substringAfter(File(multiplatformProjectDirectory).path))
