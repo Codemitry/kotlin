@@ -13,7 +13,7 @@ import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
 
-class KtExpectizingAllowed {
+class KtExpectizingCheckVisitor {
 }
 
 fun KtDeclaration.isExpectizingAllowed(): Boolean {

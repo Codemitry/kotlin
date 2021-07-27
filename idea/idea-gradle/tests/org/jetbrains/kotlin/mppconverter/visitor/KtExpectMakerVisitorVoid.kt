@@ -1,7 +1,5 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
@@ -12,10 +10,8 @@ import org.jetbrains.kotlin.idea.imports.canResolve
 import org.jetbrains.kotlin.idea.refactoring.fqName.fqName
 import org.jetbrains.kotlin.lexer.KtTokens.DATA_KEYWORD
 import org.jetbrains.kotlin.lexer.KtTokens.EXPECT_KEYWORD
-import org.jetbrains.kotlin.mppconverter.canConvertToCommon
 import org.jetbrains.kotlin.mppconverter.createKtParameterFromProperty
 import org.jetbrains.kotlin.mppconverter.createKtPropertyWithoutInitializer
-import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid.removeUnresolvableImports
 import org.jetbrains.kotlin.psi.*
@@ -159,13 +155,6 @@ fun KtFile.toFileWithExpects(): KtFile = apply {
                 it.delete()
         }
     }
-
-//    declarations.filter { it.isNotResolvable() }.forEach {
-//        if (it.canConvertToCommon())
-//            it.makeExpect()
-//        else
-//            it.delete()
-//    }
 
     importList?.removeUnresolvableImports()
 }

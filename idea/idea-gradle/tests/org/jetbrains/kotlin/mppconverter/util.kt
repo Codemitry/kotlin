@@ -15,7 +15,6 @@ import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFile
 import org.jetbrains.plugins.groovy.lang.psi.GroovyPsiElementFactory
-import java.io.File
 
 
 fun createKtParameterFromProperty(paramProperty: KtParameter): KtParameter {
@@ -109,31 +108,12 @@ fun KtFunction.isResolvableSignature(): Boolean {
 }
 
 
-
 fun KtFile.packageToRelativePath(): String {
     return if (packageDirective?.isRoot != false)
         ""
     else
         packageFqName.asString().replace(".", "/")
 }
-
-fun KtFile.createDirsAndWriteFile(to: String) {
-    File(to, this.name).also {
-        it.parentFile.mkdirs()
-        it.createNewFile()
-        it.writeText(this.text)
-    }
-}
-
-/**
- * creates copy of the file at dir and returns it
- */
-fun File.copyTo(dir: String): File =
-    File(dir, name).apply {
-        parentFile.mkdirs()
-        createNewFile()
-        writeText(this@copyTo.readText())
-    }
 
 fun Project.createTmpGroovyFile(content: CharSequence, isPhysical: Boolean = false, context: PsiElement? = null): GroovyFile {
     return GroovyPsiElementFactory.getInstance(this).createGroovyFile(content, isPhysical, context)

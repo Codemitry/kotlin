@@ -7,12 +7,9 @@ package org.jetbrains.kotlin.mppconverter
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
-import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.PsiFile
 import org.jetbrains.kotlin.idea.codeInsight.gradle.MultiplePluginVersionGradleImportingTestCase
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.debugger.readAction
@@ -42,7 +39,6 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
         File(multiplatformProjectDirectory).deleteRecursively()
         File(multiplatformProjectDirectory).mkdirs()
-//        createMppFolderStructure()
 
         ApplicationManager.getApplication().invokeLater {
             ApplicationManager.getApplication().readAction {
@@ -64,30 +60,9 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     }
 
-    @Deprecated("use virtual file system")
-    private fun addKtFileToProject(path: String): KtFile {
-        val file = File(path)
-        val text = configureKotlinVersionAndProperties(FileUtil.loadFile(file, true))
-        val virtualFile = createProjectSubFile(file.path.substringAfter(testDataDirectory().path + File.separator), text)
-        return virtualFile.toPsiFile(project) as KtFile
-    }
-
-    @Deprecated("use virtual file system")
-    private fun Project.addFileToProject(file: File, atPath: String): PsiFile {
-        val virtualFile = createProjectSubFile("$atPath${File.separator}${file.name}", file.readText())
-        return virtualFile.toPsiFile(this)!!
-    }
-
     var jvmProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/du"
 
     var multiplatformProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/${File(jvmProjectDirectory).name}_mpp"
-
-    @Deprecated("use virtual file system")
-    lateinit var commonMainSources: String
-    @Deprecated("use virtual file system")
-    lateinit var jvmMainSources: String
-    @Deprecated("use virtual file system")
-    lateinit var jsMainSources: String
 
     lateinit var virtualMultiplatformProjectDirectory: VirtualFile
     lateinit var virtualCommonMainSources: VirtualFile
@@ -96,59 +71,8 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     val tmpDirectoryName = "__tmp"
 
-    @Deprecated("use virtual file system")
-    val tmpCommonDirectory by lazy { "$commonMainSources${File.separator}$tmpDirectoryName" }
-
-    @Deprecated("use virtual file system")
-    val tmpJvmDirectory by lazy { "$jvmMainSources${File.separator}$tmpDirectoryName" }
-
     lateinit var virtualTmpCommonDirectory: VirtualFile
     lateinit var virtualTmpJvmDirectory: VirtualFile
-
-
-    @Deprecated("use virtual file system")
-    private fun createMppFolderStructure() {
-        /*
-        project:
-            - src:
-                - commonMain:
-                    - kotlin
-                - jvmMain:
-                    - kotlin
-                - jsMain
-                    - kotlin
-            - build.gradle.kts
-
-         */
-
-        File(multiplatformProjectDirectory).mkdirs()
-
-        val src = File(multiplatformProjectDirectory, "src").apply { mkdir() }
-
-        val commonMain = File(src, "commonMain").apply { mkdir() }
-        val commonMainSrcFile = File(commonMain, "kotlin").apply {
-            mkdir()
-            commonMainSources = absolutePath
-        }
-
-        val jvmMain = File(src, "jvmMain").apply { mkdir() }
-        File(jvmMain, "kotlin").apply {
-            mkdir()
-            jvmMainSources = absolutePath
-        }
-
-        val jsMain = File(src, "jsMain").apply { mkdir() }
-        File(jsMain, "kotlin").apply {
-            mkdir()
-            jsMainSources = absolutePath
-        }
-    }
-
-    @Deprecated("use virtual file system")
-    private fun createTmpDirectories() {
-        File(tmpCommonDirectory).mkdirs()
-        File(tmpJvmDirectory).mkdirs()
-    }
 
 
     private fun importFilesToJvmSources() {
@@ -283,27 +207,6 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     // required by TestCase
     override fun testDataDirectory(): File {
         return File(multiplatformProjectDirectory)
-    }
-
-    @Deprecated("Work with VFS")
-    private fun KtFile.moveTo(dir: String): KtFile {
-        project.allKotlinFiles().find { it === this }!!.delete()
-        File("$multiplatformProjectDirectory/${File(virtualFilePath).path.substringAfter(File("project").path)}").delete()
-        createDirsAndWriteFile(dir)
-
-        return addKtFileToProject("${dir}/${name}")
-    }
-
-    @Deprecated("Work with VFS")
-    private fun KtFile.remove() {
-        delete()
-        File("$multiplatformProjectDirectory/${File(virtualFilePath).path.substringAfter(File("project").path)}").delete()
-    }
-
-    @Deprecated("Work with VFS")
-    private fun KtFile.copyTo(dir: String): KtFile {
-        createDirsAndWriteFile(dir)
-        return addKtFileToProject("${dir}/${name}")
     }
 
     private fun KtFile.isResolvableWithJvmAnalyzer(): Boolean {
