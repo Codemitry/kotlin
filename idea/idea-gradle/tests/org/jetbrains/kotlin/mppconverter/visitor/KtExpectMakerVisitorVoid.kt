@@ -1,10 +1,13 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
+import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.imports.canResolve
 import org.jetbrains.kotlin.idea.refactoring.fqName.fqName
 import org.jetbrains.kotlin.lexer.KtTokens.DATA_KEYWORD
@@ -136,7 +139,14 @@ object KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
 
 private fun KtDeclaration.makeExpect() = accept(KtExpectMakerVisitorVoid)
 
-fun KtFile.getFileWithExpects(): KtFile = (this.copy() as KtFile).apply {
+fun KtFile.getFileWithExpects(path: String): KtFile {
+    val copiedVFile = virtualFile.copy(this, VfsUtil.createDirectories(path), name)
+    val copiedKtFile = copiedVFile.toPsiFile(project) as KtFile
+
+    return copiedKtFile.toFileWithExpects()
+}
+
+fun KtFile.toFileWithExpects(): KtFile = apply {
 
     declarations.forEach {
         if (it.isResolvable()) {

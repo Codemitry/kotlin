@@ -6,6 +6,8 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VfsUtil
+import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.mppconverter.canConvertToCommon
 import org.jetbrains.kotlin.mppconverter.removeInitializer
@@ -112,7 +114,16 @@ private fun KtDeclaration.makeActualWithTODOs() {
     accept(KtActualWithTODOsMakerVisitorVoid)
 }
 
-fun KtFile.getFileWithActualsWithTODOs(): KtFile = (this.copy() as KtFile).apply {
+fun KtFile.getFileWithActualsWithTODOs(path: String, newName: String = name): KtFile {
+    val actualContent = (copy() as KtFile).toFileWithActualsWithTODOs().text
+
+    val actualVFile = virtualFile.copy(this, VfsUtil.createDirectories(path), newName)
+    VfsUtil.saveText(actualVFile, actualContent)
+
+    return actualVFile.toPsiFile(project) as KtFile
+}
+
+fun KtFile.toFileWithActualsWithTODOs(): KtFile = apply {
     for (declaration in declarations) {
         if (declaration.isResolvable()) {
             if (declaration.canConvertToCommon()) // remove duplicates with common. This way let leave private declarations

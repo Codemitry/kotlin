@@ -1,5 +1,7 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
+import com.intellij.openapi.vfs.VfsUtil
+import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.mppconverter.removeInitializer
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
@@ -60,7 +62,16 @@ private fun KtDeclaration.makeActual() {
     accept(KtActualMakerVisitorVoid)
 }
 
-fun KtFile.getFileWithActuals(): KtFile = (this.copy() as KtFile).apply {
+fun KtFile.getFileWithActuals(path: String, newName: String = name): KtFile {
+    val actualContent = (copy() as KtFile).toFileWithActuals().text
+
+    val actualVFile = virtualFile.copy(this, VfsUtil.createDirectories(path), newName)
+    VfsUtil.saveText(actualVFile, actualContent)
+
+    return actualVFile.toPsiFile(project) as KtFile
+}
+
+fun KtFile.toFileWithActuals(): KtFile = apply {
     declarations.forEach { declaration ->
 
         if (declaration.isResolvable()) {
