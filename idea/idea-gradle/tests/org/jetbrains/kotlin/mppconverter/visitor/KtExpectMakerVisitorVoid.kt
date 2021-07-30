@@ -5,6 +5,7 @@ import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
+import org.jetbrains.kotlin.idea.core.deleteSingle
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.imports.canResolve
 import org.jetbrains.kotlin.idea.refactoring.fqName.fqName
@@ -135,11 +136,13 @@ object KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
 
 private fun KtDeclaration.makeExpect() = accept(KtExpectMakerVisitorVoid)
 
-fun KtFile.getFileWithExpects(path: String): KtFile {
-    val copiedVFile = virtualFile.copy(this, VfsUtil.createDirectories(path), name)
-    val copiedKtFile = copiedVFile.toPsiFile(project) as KtFile
+fun KtFile.getFileWithExpects(path: String, newName: String): KtFile {
+    val expectContent = (copy() as KtFile).toFileWithExpects().text
 
-    return copiedKtFile.toFileWithExpects()
+    val expectVFile = virtualFile.copy(this, VfsUtil.createDirectories(path), newName)
+    VfsUtil.saveText(expectVFile, expectContent)
+
+    return expectVFile.toPsiFile(project) as KtFile
 }
 
 fun KtFile.toFileWithExpects(): KtFile = apply {
@@ -152,7 +155,7 @@ fun KtFile.toFileWithExpects(): KtFile = apply {
             if (it.isExpectizingAllowed())
                 it.makeExpect()
             else
-                it.delete()
+                it.deleteSingle()
         }
     }
 

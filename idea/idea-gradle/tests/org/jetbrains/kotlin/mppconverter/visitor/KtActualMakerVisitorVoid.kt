@@ -1,6 +1,7 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
 import com.intellij.openapi.vfs.VfsUtil
+import org.jetbrains.kotlin.idea.core.deleteSingle
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.mppconverter.removeInitializer
@@ -75,7 +76,7 @@ fun KtFile.toFileWithActuals(): KtFile = apply {
     declarations.forEach { declaration ->
 
         if (declaration.isResolvable()) {
-            if (!declaration.isPrivate()) declaration.delete() // remove duplicates with common. This way let leave private declarations
+            if (!declaration.isPrivate()) declaration.deleteSingle() // remove duplicates with common. This way let leave private declarations
         } else {
             if (declaration.isExpectizingAllowed())
                 declaration.makeActual()

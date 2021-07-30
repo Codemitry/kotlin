@@ -60,9 +60,9 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     }
 
-    var jvmProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/du"
+    var jvmProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/tests/birthdaykata-master"
 
-    var multiplatformProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/${File(jvmProjectDirectory).name}_mpp"
+    var multiplatformProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/testsResults/${File(jvmProjectDirectory).name}_mpp"
 
     lateinit var virtualMultiplatformProjectDirectory: VirtualFile
     lateinit var virtualCommonMainSources: VirtualFile
@@ -157,7 +157,10 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
 
                     // create here common file with expects
-                    val expectFile = jvmKtFile.getFileWithExpects(virtualCommonMainSources.path + File.separator + jvmKtFile.packageToRelativePath())
+                    val expectFile = jvmKtFile.getFileWithExpects(
+                        virtualCommonMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
+                        jvmKtFile.name
+                    )
 
                     if (!jvmKtFile.isResolvableWithJvmAnalyzer())
                         error("file $jvmKtFile is not resolvable with jvm analyzer!")

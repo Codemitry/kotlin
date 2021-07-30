@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.mppconverter.visitor
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtil
+import org.jetbrains.kotlin.idea.core.deleteSingle
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.mppconverter.canConvertToCommon
@@ -127,12 +128,12 @@ fun KtFile.toFileWithActualsWithTODOs(): KtFile = apply {
     for (declaration in declarations) {
         if (declaration.isResolvable()) {
             if (declaration.canConvertToCommon()) // remove duplicates with common. This way let leave private declarations
-                declaration.delete()
+                declaration.deleteSingle()
         } else {
             if (declaration.canConvertToCommon())
                 declaration.makeActualWithTODOs()
             else
-                declaration.delete()
+                declaration.deleteSingle()
         }
     }
     importList?.removeUnresolvableImports()
