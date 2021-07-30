@@ -20,6 +20,7 @@ import org.jetbrains.kotlin.util.collectionUtils.concat
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
 class GradleProjectHelper(projectRoot: String) {
@@ -54,15 +55,20 @@ class GradleProjectHelper(projectRoot: String) {
         }
     }
 
-    fun runGetDependenciesSynchronously(configuration: String = "implementation"): List<Dependency> = runBlocking {
-        getDependenciesSynchronously(configuration)
-    }
+    fun runGetDependenciesSynchronously(configuration: String = "implementation"): List<Dependency> =
+        runBlocking {
+            getDependenciesSynchronously(configuration)
+        }
 
     suspend fun getDependenciesSynchronously(configuration: String = "implementation"): List<Dependency> = suspendCoroutine { cont ->
-        loadDependencies(configuration) { cont.resume(it) }
+        loadDependencies(configuration, onSuccess = { cont.resume(it) }, onFail = { cont.resumeWithException(it) })
     }
 
-    fun loadDependencies(configuration: String = "implementation", onDependenciesLoaded: (List<Dependency>) -> Unit) {
+    fun loadDependencies(
+        configuration: String = "implementation",
+        onSuccess: (List<Dependency>) -> Unit,
+        onFail: (t: Throwable) -> Unit
+    ) {
         val build = connection?.newBuild()
             ?: throw IllegalStateException("Illegal state! #connectToProject must be called before #loadDependensies.")
 
@@ -73,11 +79,12 @@ class GradleProjectHelper(projectRoot: String) {
         build.run(object : ResultHandler<Void> {
             override fun onComplete(p0: Void?) {
                 val lines = swappedOutputStream.toString("UTF-8").lines()
-                onDependenciesLoaded(rawDependenciesToList(lines, configuration))
+                onSuccess(rawDependenciesToList(lines, configuration))
             }
 
             override fun onFailure(e: GradleConnectionException?) {
-                error("failure on get dependencies for project: $e")
+                System.err.println("failure on get dependencies for project: $e")
+                onFail(e ?: Exception("Unknown error"))
             }
         })
     }
