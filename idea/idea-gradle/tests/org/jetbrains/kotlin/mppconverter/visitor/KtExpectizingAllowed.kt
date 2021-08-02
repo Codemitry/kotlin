@@ -6,49 +6,50 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
 import org.jetbrains.kotlin.idea.util.ifTrue
-import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.mppconverter.isResolvableSignature
-import org.jetbrains.kotlin.mppconverter.isResolvableType
-import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
-import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
+import org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD
+import org.jetbrains.kotlin.mppconverter.resolvers.*
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.isTopLevelKtOrJavaMember
 
-class KtExpectizingCheckVisitor {
+private object KtExpectizingCheckVisitor : KtVisitor<Boolean, Unit>() {
+
+    override fun visitKtElement(element: KtElement, data: Unit): Boolean {
+        return element.acceptChildren(this, data) { it.all { it } }
+    }
+
+    override fun visitProperty(property: KtProperty, data: Unit): Boolean = property.isResolvableType()
+
+    override fun visitNamedFunction(function: KtNamedFunction, data: Unit): Boolean = function.isResolvableSignature()
+
+    override fun visitTypeAlias(typeAlias: KtTypeAlias, data: Unit): Boolean = typeAlias.isResolvable()
+
+    override fun visitObjectDeclaration(dcl: KtObjectDeclaration, data: Unit): Boolean {
+        dcl.primaryConstructor?.isNotResolvable()?.ifTrue { return false }
+        return dcl.declarations.all { visitDeclaration(it, data) }
+    }
+
+    override fun visitClass(klass: KtClass, data: Unit): Boolean {
+        klass.getSuperTypeList()?.isNotResolvable()?.ifTrue { return false }
+
+        if (klass.isEnum() && (klass.hasPrimaryConstructor() || klass.secondaryConstructors.isNotEmpty())) return false
+
+        klass.primaryConstructor?.isNotResolvable()?.ifTrue { return false }
+        klass.secondaryConstructors.any { it.isNotResolvable() }.ifTrue { return false }
+
+        return klass.declarations.all { visitDeclaration(it, data) }
+    }
+
+    override fun visitDeclaration(dcl: KtDeclaration, data: Unit): Boolean {
+        if (dcl.hasModifier(PRIVATE_KEYWORD)) return false
+        return super.visitDeclaration(dcl, data)
+    }
+
 }
 
 fun KtDeclaration.isExpectizingAllowed(): Boolean {
-    if (this.hasModifier(KtTokens.PRIVATE_KEYWORD)) return false
+    if (!this.isTopLevelKtOrJavaMember()) return false
 
-    when (this) {
-        is KtClass -> {
-            this.getSuperTypeList()?.isNotResolvable()?.ifTrue { return false }
-
-            if (this.isEnum() && (this.hasPrimaryConstructor() || this.secondaryConstructors.isNotEmpty())) return false
-
-            this.primaryConstructor?.isNotResolvable()?.ifTrue { return false }
-
-            this.secondaryConstructors.any { !it.isResolvable() }.ifTrue { return false }
-
-            this.declarations.any { it.isExpectizingDenied() }.ifTrue { return false }
-        }
-        is KtObjectDeclaration -> {
-            this.primaryConstructor?.isNotResolvable()?.ifTrue { return false }
-
-            this.declarations.any { it.isExpectizingDenied() }.ifTrue { return false }
-        }
-        is KtFunction -> {
-            if (!this.isResolvableSignature()) return false
-        }
-        is KtProperty -> {
-            if (!this.isResolvableType()) return false
-        }
-        is KtTypeAlias -> {
-            if (this.isNotResolvable()) return false
-        }
-        else -> System.err.println("Unknown declaration: ${this.text}\n------------\n\n")
-    }
-
-    return true
+    return accept(KtExpectizingCheckVisitor, Unit)
 }
 
 fun KtDeclaration.isExpectizingDenied(): Boolean = !isExpectizingAllowed()
