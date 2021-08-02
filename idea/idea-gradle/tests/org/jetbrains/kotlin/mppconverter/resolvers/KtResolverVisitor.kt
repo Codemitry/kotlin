@@ -9,16 +9,25 @@ import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
+import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
+import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.getReturnTypeReference
 import org.jetbrains.kotlin.idea.util.ifFalse
+import org.jetbrains.kotlin.mppconverter.commonMainModule
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.bindingContextUtil.getAbbreviatedTypeOrType
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
+import org.jetbrains.kotlin.resolve.descriptorUtil.module
+import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.typeUtil.containsError
+import java.util.*
+
+private val calls = Stack<KotlinType>()
 
 class KtResolverVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
+
     // each visit-function returns "true" when element is resolvable with the analyzer, and "false", when it can't resolve with current analyzer
     override fun visitKtElement(element: KtElement, data: Unit): Boolean {
         return element.acceptChildren(this, data) { it.all { it } }
@@ -48,26 +57,30 @@ class KtResolverVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
 
     override fun visitTypeReference(typeReference: KtTypeReference, data: Unit?): Boolean {
         val type = typeReference.getAbbreviatedTypeOrType() ?: return false
-        return type.isResolvable()
+        return type.isResolvable(project)
     }
 
     override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression, data: Unit?): Boolean {
         val resolvedCall = expression.getResolvedCall() ?: return false
+        expression.receiverExpression.isResolvable().ifFalse { return false }
+        expression.selectorExpression?.isResolvable()?.ifFalse { return false }
         val type = expression.getType() ?: return false
-        return type.isResolvable()
+        return type.isResolvable(project)
     }
 
     override fun visitCallableReferenceExpression(expression: KtCallableReferenceExpression, data: Unit?): Boolean {
-        val resolvedCall = expression.getResolvedCall() ?: return false
+        if (expression.callableReference.isNotResolvable()) return false
         val type = expression.getType() ?: return false
-        return type.isResolvable()
+        return type.isResolvable(project)
     }
 
     override fun visitCallExpression(expression: KtCallExpression, data: Unit?): Boolean {
         val resolvedCall = expression.getResolvedCall() ?: return false
         resolvedCall.call.valueArgumentList?.isResolvable()?.ifFalse { return false }
+        resolvedCall.call.typeArgumentList?.isResolvable()?.ifFalse { return false }
+        resolvedCall.call.functionLiteralArguments.all { it.asElement().isResolvable() }.ifFalse { return false }
         val type = expression.getType() ?: return false
-        return type.isResolvable()
+        return type.isResolvable(project)
     }
 
 
@@ -75,13 +88,13 @@ class KtResolverVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
         // getType of expression is null. => used expression.arrayExpression
         val resolvedCall = expression.resolveToCall() ?: return false
         val type = expression.arrayExpression?.getType() ?: return false
-        return type.isResolvable()
+        return type.isResolvable(project)
     }
 
     override fun visitReferenceExpression(expression: KtReferenceExpression, data: Unit?): Boolean {
         val resolvedCall = expression.getResolvedCall() ?: return false
         val type = expression.getType() ?: return false
-        return type.isResolvable()
+        return type.isResolvable(project)
     }
 
 
@@ -91,16 +104,37 @@ class KtResolverVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
 
     private fun KtExpression.getType(): KotlinType? = getType(analyze())
 
-
-    private fun <R, D> KtElement.acceptChildren(visitor: KtVisitor<R, D>, data: D, returnCondition: (List<R>) -> R): R {
-        return returnCondition(children.mapNotNull { (it as? KtElement)?.accept(visitor, data) })
-    }
-
 }
 
-fun KotlinType.isResolvable(): Boolean {
+fun <R, D> KtElement.acceptChildren(visitor: KtVisitor<R, D>, data: D, returnCondition: (List<R>) -> R): R {
+    return returnCondition(children.mapNotNull { (it as? KtElement)?.accept(visitor, data) })
+}
+
+fun KotlinType.isResolvable(project: Project): Boolean {
     if (this.containsError()) return false
     val descriptor = this.constructor.declarationDescriptor ?: error("declaration descriptor of constructor of KotlinType is null")
+
+    if (descriptor.module != project.commonMainModule())
+        return true
+
+    if (calls.contains(this))
+        return true
+
+    calls.push(this)
+
+    return (descriptor.source.getPsi() as? KtElement)!!.isResolvable().apply { calls.pop() }
+}
+
+
+fun KtProperty.isResolvableType(): Boolean {
+    typeReference?.let { return it.isResolvable() }
+    return resolveToDescriptorIfAny()?.type?.isResolvable(project) == true
+}
+
+fun KtFunction.isResolvableSignature(): Boolean {
+    this.receiverTypeReference?.let { if (it.isNotResolvable()) return false }
+    this.valueParameters.forEach { if (it.isNotResolvable()) return false }
+    this.getReturnTypeReference()?.let { if (it.isNotResolvable()) return false } // if return type declared explicitly
 
     return true
 }

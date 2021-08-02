@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.mppconverter
 
+import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiElement
@@ -9,6 +10,8 @@ import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.getRet
 import org.jetbrains.kotlin.idea.util.ifTrue
 import org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
+import org.jetbrains.kotlin.mppconverter.resolvers.isResolvableSignature
+import org.jetbrains.kotlin.mppconverter.resolvers.isResolvableType
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
@@ -94,18 +97,6 @@ fun PsiElement.canConvertToCommon(context: BindingContext? = null): Boolean {
     return true
 }
 
-fun KtProperty.isResolvableType(): Boolean {
-    typeReference?.let { return it.isResolvable() }
-    return resolveToDescriptorIfAny()?.type?.isResolvable() == true
-}
-
-fun KtFunction.isResolvableSignature(): Boolean {
-    this.receiverTypeReference?.let { if (!it.isResolvable()) return false }
-    this.valueParameters.forEach { if (!it.isResolvable()) return false }
-    this.getReturnTypeReference()?.let { if (!it.isResolvable()) return false } // if return type declared explicitly
-
-    return true
-}
 
 
 fun KtFile.packageToRelativePath(): String {
@@ -145,3 +136,10 @@ fun KotlinType.getDeepJetTypeFqName(printTypeArguments: Boolean): String {
 
     return DescriptorUtils.getFqName(declaration).asString() + typeArgumentsAsString
 }
+
+internal fun Project.commonMainModule() = ModuleManager.getInstance(this).findModuleByName("${name}_commonMain")
+internal fun Project.commonTestModule() = ModuleManager.getInstance(this).findModuleByName("${name}_commonTest")
+internal fun Project.jvmMainModule() = ModuleManager.getInstance(this).findModuleByName("${name}_jvmMain")
+internal fun Project.jvmTestModule() = ModuleManager.getInstance(this).findModuleByName("${name}_jvmTest")
+internal fun Project.jsMainModule() = ModuleManager.getInstance(this).findModuleByName("${name}_jsMain")
+internal fun Project.jsTestModule() = ModuleManager.getInstance(this).findModuleByName("${name}_jsTest")
