@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.mppconverter.typespecifiyng
 
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
+import org.jetbrains.kotlin.idea.imports.canBeReferencedViaImport
 import org.jetbrains.kotlin.mppconverter.getDeepJetTypeFqName
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.isPrivate
@@ -81,8 +82,15 @@ object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
 
 
     private fun KtPsiFactory.createFqType(type: KotlinType): KtTypeReference {
-        val fqReturnTypeName = type.getDeepJetTypeFqName(true) + if (type.isMarkedNullable) "?" else ""
-        return createType(fqReturnTypeName)
+        val typeText = buildString {
+            append(
+                if (type.canBeReferencedViaImport())
+                    type.getDeepJetTypeFqName(true) + if (type.isMarkedNullable) "?" else ""
+                else
+                    type.toString()
+            )
+        }
+        return createType(typeText)
     }
 }
 
