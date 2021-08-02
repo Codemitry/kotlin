@@ -82,7 +82,6 @@ ${targetsSection.withIndent(1)}
     targets.all {
         compilations.all {
             kotlinOptions {
-                allWarningsAsErrors = true
             }
         }
     }
