@@ -6,15 +6,8 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.VfsUtil
-import org.jetbrains.kotlin.idea.core.deleteSingle
-import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.lexer.KtTokens.*
-import org.jetbrains.kotlin.mppconverter.canConvertToCommon
 import org.jetbrains.kotlin.mppconverter.removeInitializer
-import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
-import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
-import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid.removeUnresolvableImports
 import org.jetbrains.kotlin.psi.*
 
 object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
@@ -22,39 +15,22 @@ object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
     override fun visitNamedFunction(function: KtNamedFunction) {
         function.addModifier(ACTUAL_KEYWORD)
 
-        function.bodyBlockExpression?.let { bodyBlock ->
-            if (bodyBlock.isNotResolvable()) {
-                bodyBlock.replace(createTODOCallExpressionInBody(function.project))
-            }
-        }
-
-        function.initializer?.let { initializer ->
-            if (initializer.isNotResolvable()) {
-                initializer.replace(createTODOCallExpression(function.project))
-            }
-        }
+        function.bodyBlockExpression?.replace(createTODOCallExpressionInBody(function.project))
+        function.initializer?.replace(createTODOCallExpression(function.project))
     }
 
     override fun visitProperty(property: KtProperty) {
         property.addModifier(ACTUAL_KEYWORD)
-        property.delegateExpressionOrInitializer?.let { expression ->
-            if (expression.isNotResolvable()) {
-                expression.replace(createTODOCallExpression(property.project))
-            }
-        }
+        property.delegateExpressionOrInitializer?.replace(createTODOCallExpression(property.project))
 
         property.setter?.let { setter ->
-            if (setter.isNotResolvable()) {
-                setter.initializer?.replace(createTODOCallExpression(property.project))
-                setter.bodyBlockExpression?.replace(createTODOCallExpressionInBody(property.project))
-            }
+            setter.initializer?.replace(createTODOCallExpression(property.project))
+            setter.bodyBlockExpression?.replace(createTODOCallExpressionInBody(property.project))
         }
 
         property.getter?.let { getter ->
-            if (getter.isNotResolvable()) {
-                getter.initializer?.replace(createTODOCallExpression(property.project))
-                getter.bodyBlockExpression?.replace(createTODOCallExpressionInBody(property.project))
-            }
+            getter.initializer?.replace(createTODOCallExpression(property.project))
+            getter.bodyBlockExpression?.replace(createTODOCallExpressionInBody(property.project))
         }
     }
 
@@ -96,48 +72,18 @@ object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
         constructor.addModifier(ACTUAL_KEYWORD)
 
         constructor.getDelegationCallOrNull()?.let { delegationCall ->
-            if (delegationCall.isNotResolvable()) {
-                delegationCall.valueArgumentList?.arguments?.forEach { it.delete() }
-            }
+            delegationCall.valueArgumentList?.arguments?.forEach { it.delete() }
         }
 
-        constructor.bodyBlockExpression?.let { bodyBlock ->
-            if (bodyBlock.isNotResolvable()) {
-                bodyBlock.replace(createTODOCallExpressionInBody(constructor.project))
-            }
-        }
+        constructor.bodyBlockExpression?.replace(createTODOCallExpressionInBody(constructor.project))
 
     }
 
 }
 
-private fun KtDeclaration.makeActualWithTODOs() {
-    accept(KtActualWithTODOsMakerVisitorVoid)
-}
+fun KtDeclaration.makeActualWithTODOs() = accept(KtActualWithTODOsMakerVisitorVoid)
+fun KtDeclaration.toActualWithTODOs() = apply { makeActualWithTODOs() }
 
-fun KtFile.getFileWithActualsWithTODOs(path: String, newName: String = name): KtFile {
-    val actualContent = (copy() as KtFile).toFileWithActualsWithTODOs().text
-
-    val actualVFile = virtualFile.copy(this, VfsUtil.createDirectories(path), newName)
-    VfsUtil.saveText(actualVFile, actualContent)
-
-    return actualVFile.toPsiFile(project) as KtFile
-}
-
-fun KtFile.toFileWithActualsWithTODOs(): KtFile = apply {
-    for (declaration in declarations) {
-        if (declaration.isResolvable()) {
-            if (declaration.canConvertToCommon()) // remove duplicates with common. This way let leave private declarations
-                declaration.deleteSingle()
-        } else {
-            if (declaration.canConvertToCommon())
-                declaration.makeActualWithTODOs()
-            else
-                declaration.deleteSingle()
-        }
-    }
-    importList?.removeUnresolvableImports()
-}
 
 fun KtPsiFactory.createCallExpression(text: String): KtCallExpression {
     val property = createProperty("val x = $text")
@@ -150,4 +96,5 @@ fun KtPsiFactory.createBodyWithExpression(text: String): KtBlockExpression {
 
 fun createTODOCallExpression(project: Project): KtExpression = KtPsiFactory(project).createCallExpression("TODO(\"Not yet implemented\")")
 
-fun createTODOCallExpressionInBody(project: Project): KtBlockExpression = KtPsiFactory(project).createBodyWithExpression("TODO(\"Not yet implemented\")")
+fun createTODOCallExpressionInBody(project: Project): KtBlockExpression =
+    KtPsiFactory(project).createBodyWithExpression("TODO(\"Not yet implemented\")")

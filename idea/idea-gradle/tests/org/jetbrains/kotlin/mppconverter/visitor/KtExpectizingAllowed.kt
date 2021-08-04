@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.mppconverter.visitor
 
+import org.jetbrains.kotlin.idea.util.hasPrivateModifier
 import org.jetbrains.kotlin.idea.util.ifTrue
 import org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD
 import org.jetbrains.kotlin.mppconverter.resolvers.*
@@ -53,3 +54,6 @@ fun KtDeclaration.isExpectizingAllowed(): Boolean {
 }
 
 fun KtDeclaration.isExpectizingDenied(): Boolean = !isExpectizingAllowed()
+
+fun KtFile.isExpectizingAllowed(): Boolean = declarations.any { !it.hasPrivateModifier() && it.isExpectizingAllowed() }
+fun KtFile.isExpectizingDenied(): Boolean = declarations.all { it.hasPrivateModifier() || it.isExpectizingDenied() }

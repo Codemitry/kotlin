@@ -5,15 +5,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
-import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
-import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.getReturnTypeReference
-import org.jetbrains.kotlin.idea.util.ifTrue
-import org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD
-import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
-import org.jetbrains.kotlin.mppconverter.resolvers.isResolvableSignature
-import org.jetbrains.kotlin.mppconverter.resolvers.isResolvableType
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFile
@@ -55,49 +47,6 @@ fun KtParameter.removeInitializer() {
     equalsToken?.delete()
 }
 
-fun PsiElement.canConvertToCommon(context: BindingContext? = null): Boolean {
-    when (this) {
-        is KtClass -> {
-
-            if (this.hasModifier(PRIVATE_KEYWORD)) return false
-
-            if (this.getSuperTypeList()?.isResolvable() != true) return false
-
-            if (this.isEnum() && (this.hasPrimaryConstructor() || this.secondaryConstructors.isNotEmpty())) return false
-
-            if (this.primaryConstructor?.isResolvable() != true) return false
-
-            this.secondaryConstructors.any { !it.isResolvable() }.ifTrue { return false }
-
-            this.declarations.any { !it.canConvertToCommon() }.ifTrue { return false }
-        }
-
-        is KtObjectDeclaration -> {
-            if (this.hasModifier(PRIVATE_KEYWORD)) return false
-
-            if (this.getSuperTypeList()?.isResolvable() != true) return false
-
-            this.declarations.any { !it.canConvertToCommon() }.ifTrue { return false }
-        }
-        is KtFunction -> {
-            if (this.hasModifier(PRIVATE_KEYWORD)) return false
-
-            if (!this.isResolvableSignature()) return false
-        }
-        is KtProperty -> {
-            if (this.hasModifier(PRIVATE_KEYWORD)) return false
-            if (!this.isResolvableType()) return false
-        }
-
-        is KtFile -> {
-            return this.declarations.any { it.canConvertToCommon(context) }
-        }
-    }
-
-    return true
-}
-
-
 
 fun KtFile.packageToRelativePath(): String {
     return if (packageDirective?.isRoot != false)
@@ -135,6 +84,11 @@ fun KotlinType.getDeepJetTypeFqName(printTypeArguments: Boolean): String {
     }
 
     return DescriptorUtils.getFqName(declaration).asString() + typeArgumentsAsString
+}
+
+fun KtElement.addWithEndedNL(elem: PsiElement) {
+    add(elem)
+    add(KtPsiFactory(this).createNewLine(2))
 }
 
 internal fun Project.commonMainModule() = ModuleManager.getInstance(this).findModuleByName("${name}_commonMain")

@@ -18,12 +18,8 @@ import org.jetbrains.kotlin.mppconverter.gradle.GradleProjectHelper
 import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.mppconverter.typespecifiyng.acceptExplicitTypeSpecifier
-import org.jetbrains.kotlin.mppconverter.visitor.getFileWithActuals
-import org.jetbrains.kotlin.mppconverter.visitor.getFileWithActualsWithTODOs
-import org.jetbrains.kotlin.mppconverter.visitor.getFileWithExpects
 import org.jetbrains.kotlin.mppconverter.visitor.isExpectizingDenied
 import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 import org.junit.Test
 import java.io.File
 
@@ -60,7 +56,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     }
 
-    var jvmProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/tests/birthdaykata-master"
+    var jvmProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/tests/success/LogDog-master"
 
     var multiplatformProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/testsResults/${File(jvmProjectDirectory).name}_mpp"
 
@@ -104,7 +100,8 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
             virtualTmpJvmDirectory = virtualJvmMainSources.findChild(tmpDirectoryName)!!
 
             File(jvmProjectDirectory, "src/main/kotlin").walkTopDown().filter { it.extension == "kt" }.toList().forEach { curJvmFile ->
-                LocalFileSystem.getInstance().findFileByPath(curJvmFile.path)!!.copy(this, virtualTmpJvmDirectory, curJvmFile.name)
+                val vdir = VfsUtil.createDirectoryIfMissing(virtualTmpJvmDirectory, (curJvmFile.toPsiFile(project) as KtFile).packageToRelativePath())
+                LocalFileSystem.getInstance().findFileByPath(curJvmFile.path)!!.copy(this, vdir, curJvmFile.name)
             }
         }
 
@@ -117,7 +114,8 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         WriteCommandAction.runWriteCommandAction(project) {
             project.allKotlinFiles().filter { it.isInJvmSources() }.forEach {
                 it.acceptExplicitTypeSpecifier()
-                it.virtualFile.move(this, virtualTmpCommonDirectory)
+                val vdir = VfsUtil.createDirectoryIfMissing(virtualTmpCommonDirectory, it.packageToRelativePath())
+                it.virtualFile.move(this, vdir)
             }
         }
 
@@ -125,7 +123,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     private fun moveAllFilesThatDependsOnJvmAndCantBeConvertedToCommon() {
         var fullyJvmDependentFiles = project.allKotlinFiles().filter {
-            it.isInCommonSources() && it.isNotResolvable() && it.isResolvableWithJvmAnalyzer() && !it.canConvertToCommon()
+            it.isInCommonSources() && it.isNotResolvable() && it.isResolvableWithJvmAnalyzer() && it.isExpectizingDenied()
         }
 
         while (fullyJvmDependentFiles.isNotEmpty()) {
@@ -135,7 +133,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
             }
 
             fullyJvmDependentFiles = project.allKotlinFiles()
-                .filter { it.isInCommonSources() && it.isNotResolvable() && it.isResolvableWithJvmAnalyzer() && !it.canConvertToCommon() }
+                .filter { it.isInCommonSources() && it.isNotResolvable() && it.isResolvableWithJvmAnalyzer() && it.isExpectizingDenied() }
         }
     }
 
@@ -145,38 +143,35 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         project.allKotlinFiles().filter { it.isInCommonSources() }.forEach { jvmKtFile ->
 
             if (jvmKtFile.isResolvable()) {
-                // the file is fully resolvable with common-analyze
+                // the file is fully resolvable with common-analyze => move it to common sources
                 VfsUtil.createDirectoryIfMissing(virtualCommonMainSources.path + File.separator + jvmKtFile.packageToRelativePath())
                 jvmKtFile.virtualFile.move(this, virtualCommonMainSources.findFileByRelativePath(jvmKtFile.packageToRelativePath())!!)
             } else {
 
-                if (jvmKtFile.declarations.all { it.isPrivate() || it.isExpectizingDenied() }) {
+                if (jvmKtFile.isExpectizingDenied()) {
+                    // the file is not resolvable with common-analyze and can be converted to expect/actual => move it to jvm sources
                     VfsUtil.createDirectoryIfMissing(virtualJvmMainSources.path + File.separator + jvmKtFile.packageToRelativePath())
                     jvmKtFile.virtualFile.move(this, virtualJvmMainSources.findFileByRelativePath(jvmKtFile.packageToRelativePath())!!)
                 } else {
+                    // the file can be converted to expect/actual scheme
 
-
-                    // create here common file with expects
-                    val expectFile = jvmKtFile.getFileWithExpects(
-                        virtualCommonMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
-                        jvmKtFile.name
-                    )
-
+                    // only check to validity of resolving. Remove it after tests
                     if (!jvmKtFile.isResolvableWithJvmAnalyzer())
                         error("file $jvmKtFile is not resolvable with jvm analyzer!")
 
-                    val actualFile = jvmKtFile.getFileWithActuals(
-                        virtualJvmMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
-                        "${jvmKtFile.virtualFile.nameWithoutExtension}Jvm.${jvmKtFile.virtualFile.extension}"
-                    )
+                    val expectActualMaker = ExpectActualMaker(jvmKtFile)
+                    expectActualMaker.generateFiles(
+                        virtualCommonMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
+                        jvmKtFile.name,
 
-                    val actualWithTODOsFile = jvmKtFile.getFileWithActualsWithTODOs(
+                        virtualJvmMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
+                        "${jvmKtFile.virtualFile.nameWithoutExtension}Jvm.${jvmKtFile.virtualFile.extension}",
+
                         virtualJsMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
                         "${jvmKtFile.virtualFile.nameWithoutExtension}Js.${jvmKtFile.virtualFile.extension}"
                     )
 
-
-                    virtualTmpCommonDirectory.findChild(jvmKtFile.name)!!.delete(this)
+                    jvmKtFile.virtualFile.delete(this)
                 }
 
             }
@@ -214,7 +209,8 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     private fun KtFile.isResolvableWithJvmAnalyzer(): Boolean {
         val oldDir = virtualFile.directory()
-        virtualFile.move(this, virtualTmpJvmDirectory)
+        val vdir = VfsUtil.createDirectoryIfMissing(virtualTmpJvmDirectory, packageToRelativePath())
+        virtualFile.move(this, vdir)
         val isResolvedWithJvmAnalyzer = isResolvable()
         virtualFile.move(this, oldDir)
 

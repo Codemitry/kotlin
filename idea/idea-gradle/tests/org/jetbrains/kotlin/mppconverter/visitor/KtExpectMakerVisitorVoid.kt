@@ -1,22 +1,16 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
-import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
-import org.jetbrains.kotlin.idea.core.deleteSingle
-import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.imports.canResolve
 import org.jetbrains.kotlin.idea.refactoring.fqName.fqName
 import org.jetbrains.kotlin.lexer.KtTokens.DATA_KEYWORD
 import org.jetbrains.kotlin.lexer.KtTokens.EXPECT_KEYWORD
 import org.jetbrains.kotlin.mppconverter.createKtParameterFromProperty
 import org.jetbrains.kotlin.mppconverter.createKtPropertyWithoutInitializer
-import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
-import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid.removeUnresolvableImports
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 import org.jetbrains.kotlin.psi.psiUtil.isPropertyParameter
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
@@ -128,36 +122,15 @@ object KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
         addAfter(KtPsiFactory(element).createNewLine(), lBrace)
     }
 
-    fun KtImportList.removeUnresolvableImports() {
-        imports.filter { !it.canResolve(it.getResolutionFacade()) }.forEach { it.delete() }
+    fun KtFile.removeUnresolvableImports() {
+        importDirectives.filter { !it.canResolve(it.getResolutionFacade()) }.forEach { it.delete() }
     }
 
 }
 
-private fun KtDeclaration.makeExpect() = accept(KtExpectMakerVisitorVoid)
-
-fun KtFile.getFileWithExpects(path: String, newName: String): KtFile {
-    val expectContent = (copy() as KtFile).toFileWithExpects().text
-
-    val expectVFile = virtualFile.copy(this, VfsUtil.createDirectories(path), newName)
-    VfsUtil.saveText(expectVFile, expectContent)
-
-    return expectVFile.toPsiFile(project) as KtFile
+fun KtDeclaration.makeExpect() {
+    accept(KtExpectMakerVisitorVoid)
+    addModifier(EXPECT_KEYWORD)
 }
 
-fun KtFile.toFileWithExpects(): KtFile = apply {
-
-    declarations.forEach {
-        if (it.isResolvable()) {
-            if (it.isPrivate())
-                /* TODO replace it with extension in future */ ;
-        } else {
-            if (it.isExpectizingAllowed())
-                it.makeExpect()
-            else
-                it.deleteSingle()
-        }
-    }
-
-    importList?.removeUnresolvableImports()
-}
+fun KtDeclaration.toExpect() = apply { makeExpect() }

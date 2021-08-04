@@ -61,7 +61,7 @@ class KtResolverVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
     }
 
     override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression, data: Unit?): Boolean {
-        val resolvedCall = expression.getResolvedCall() ?: return false
+//        val resolvedCall = expression.getResolvedCall() ?: return false
         expression.receiverExpression.isResolvable().ifFalse { return false }
         expression.selectorExpression?.isResolvable()?.ifFalse { return false }
         val type = expression.getType() ?: return false
@@ -85,7 +85,7 @@ class KtResolverVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
 
 
     override fun visitArrayAccessExpression(expression: KtArrayAccessExpression, data: Unit?): Boolean {
-        // getType of expression is null. => used expression.arrayExpression
+        // getType of expression is null => used expression.arrayExpression
         val resolvedCall = expression.resolveToCall() ?: return false
         val type = expression.arrayExpression?.getType() ?: return false
         return type.isResolvable(project)
@@ -114,7 +114,8 @@ fun KotlinType.isResolvable(project: Project): Boolean {
     if (this.containsError()) return false
     val descriptor = this.constructor.declarationDescriptor ?: error("declaration descriptor of constructor of KotlinType is null")
 
-    if (descriptor.module != project.commonMainModule())
+    // two cases because two modules: x and production for module x can exist
+    if (descriptor.module != project.commonMainModule() && descriptor.module.stableName?.asString() != "<${project.name}_commonMain>")
         return true
 
     if (calls.contains(this))

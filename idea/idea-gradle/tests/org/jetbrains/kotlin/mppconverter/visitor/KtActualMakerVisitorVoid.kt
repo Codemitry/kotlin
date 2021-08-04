@@ -1,14 +1,8 @@
 package org.jetbrains.kotlin.mppconverter.visitor
 
-import com.intellij.openapi.vfs.VfsUtil
-import org.jetbrains.kotlin.idea.core.deleteSingle
-import org.jetbrains.kotlin.idea.core.util.toPsiFile
-import org.jetbrains.kotlin.idea.util.expectedDeclarationIfAny
 import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.mppconverter.removeInitializer
-import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 
 object KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
 
@@ -60,27 +54,5 @@ object KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
     }
 }
 
-private fun KtDeclaration.makeActual() {
-    accept(KtActualMakerVisitorVoid)
-}
-
-fun KtFile.getFileWithActuals(path: String, newName: String = name): KtFile {
-    val actualContent = (copy() as KtFile).toFileWithActuals().text
-
-    val actualVFile = virtualFile.copy(this, VfsUtil.createDirectories(path), newName)
-    VfsUtil.saveText(actualVFile, actualContent)
-
-    return actualVFile.toPsiFile(project) as KtFile
-}
-
-fun KtFile.toFileWithActuals(): KtFile = apply {
-    declarations.forEach { declaration ->
-
-        if (declaration.isResolvable()) {
-            if (!declaration.isPrivate()) declaration.deleteSingle() // remove duplicates with common. This way let leave private declarations
-        } else {
-            if (declaration.expectedDeclarationIfAny() != null)
-                declaration.makeActual()
-        }
-    }
-}
+fun KtDeclaration.makeActual() = accept(KtActualMakerVisitorVoid)
+fun KtDeclaration.toActual() = apply { makeActual() }
