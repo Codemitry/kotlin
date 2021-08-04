@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.getReturnTypeReference
 import org.jetbrains.kotlin.idea.util.ifFalse
+import org.jetbrains.kotlin.idea.util.ifTrue
 import org.jetbrains.kotlin.mppconverter.commonMainModule
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.bindingContextUtil.getAbbreviatedTypeOrType
@@ -112,6 +113,9 @@ fun <R, D> KtElement.acceptChildren(visitor: KtVisitor<R, D>, data: D, returnCon
 
 fun KotlinType.isResolvable(project: Project): Boolean {
     if (this.containsError()) return false
+
+    arguments.any { !it.type.isResolvable(project) }.ifTrue { return false }
+
     val descriptor = this.constructor.declarationDescriptor ?: error("declaration descriptor of constructor of KotlinType is null")
 
     // two cases because two modules: x and production for module x can exist

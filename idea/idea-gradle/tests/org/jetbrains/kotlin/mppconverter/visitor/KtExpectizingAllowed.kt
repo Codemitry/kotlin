@@ -26,7 +26,7 @@ private object KtExpectizingCheckVisitor : KtVisitor<Boolean, Unit>() {
 
     override fun visitObjectDeclaration(dcl: KtObjectDeclaration, data: Unit): Boolean {
         dcl.primaryConstructor?.isNotResolvable()?.ifTrue { return false }
-        return dcl.declarations.all { visitDeclaration(it, data) }
+        return dcl.declarations.all { it.isExpectizingAllowed() }
     }
 
     override fun visitClass(klass: KtClass, data: Unit): Boolean {
@@ -37,7 +37,7 @@ private object KtExpectizingCheckVisitor : KtVisitor<Boolean, Unit>() {
         klass.primaryConstructor?.isNotResolvable()?.ifTrue { return false }
         klass.secondaryConstructors.any { it.isNotResolvable() }.ifTrue { return false }
 
-        return klass.declarations.all { visitDeclaration(it, data) }
+        return klass.declarations.all { it.isExpectizingAllowed() }
     }
 
     override fun visitDeclaration(dcl: KtDeclaration, data: Unit): Boolean {
