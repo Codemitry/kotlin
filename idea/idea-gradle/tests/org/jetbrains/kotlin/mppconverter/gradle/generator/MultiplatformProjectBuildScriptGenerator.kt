@@ -5,20 +5,20 @@
 
 package org.jetbrains.kotlin.mppconverter.gradle.generator
 
-interface MultiplatformProjectBuildScriptGenerator {
-    val plugins: MutableList<String>
-    val targets: MutableList<Target>
-    val repositories: MutableList<String>
+abstract class MultiplatformProjectBuildScriptGenerator {
+    abstract val plugins: MutableList<String>
+    abstract val targets: MutableList<Target>
+    abstract val repositories: MutableList<String>
 
     /**
      * format: sourceSet: dependency
      */
-    val sourceSetsDependencies: MutableMap<String, MutableList<Dependency>>
+    abstract val sourceSetsDependencies: MutableMap<String, MutableList<Dependency>>
 
-    val pluginsSection: String
-    val targetsSection: String
-    val sourceSetsSection: String
-    val repositoriesSection: String
+    abstract val pluginsSection: String
+    abstract val targetsSection: String
+    abstract val sourceSetsSection: String
+    abstract val repositoriesSection: String
 
     fun addDependencyToSourceSet(sourceSet: String, dependency: Dependency) {
         if (!sourceSetsDependencies.containsKey(sourceSet))
@@ -60,8 +60,8 @@ interface MultiplatformProjectBuildScriptGenerator {
         setRepositories(repositories.toList())
     }
 
-    fun sourceSetSection(sourceSet: String): String
-    fun generate(): String
+    abstract fun sourceSetSection(sourceSet: String): String
+    abstract fun generate(): String
 
 
     fun hasSourceSet(sourceSet: String): Boolean = sourceSetsDependencies.containsKey(sourceSet)
