@@ -12,6 +12,7 @@ import org.gradle.tooling.GradleConnector
 import org.gradle.tooling.ProjectConnection
 import org.gradle.tooling.ResultHandler
 import org.gradle.tooling.model.GradleProject
+import org.gradle.tooling.model.idea.IdeaProject
 import org.jetbrains.kotlin.mppconverter.gradle.generator.*
 import org.jetbrains.kotlin.mppconverter.gradle.parser.BuildScriptParser
 import org.jetbrains.kotlin.mppconverter.gradle.parser.GroovyBuildScriptParser
@@ -33,6 +34,9 @@ class GradleProjectHelper(projectRoot: String) {
     private lateinit var buildScriptParser: BuildScriptParser
     private lateinit var buildScriptGenerator: MultiplatformProjectBuildScriptGenerator
 
+    private var gradleProjectModel: GradleProject? = null
+    private var ideaProjectModel: IdeaProject? = null
+
     init {
         if (!this.projectRoot.isDirectory) throw IllegalArgumentException("projectRoot $projectRoot is not directory!")
     }
@@ -42,6 +46,9 @@ class GradleProjectHelper(projectRoot: String) {
             forProjectDirectory(projectRoot)
             connection = connect()
         }
+
+        ideaProjectModel = connection?.getModel(IdeaProject::class.java)
+        gradleProjectModel = connection?.getModel(GradleProject::class.java)
 
         when (buildScriptFileType) {
             BuildScriptFileType.KotlinScript -> {
@@ -118,8 +125,18 @@ class GradleProjectHelper(projectRoot: String) {
     }
 
     val buildScriptFile: File by lazy {
-        connection?.getModel(GradleProject::class.java)?.buildScript?.sourceFile
+        gradleProjectModel?.buildScript?.sourceFile
             ?: throw IllegalStateException("Illegal state! #connectToProject must be called before calling buildScriptFile.")
+    }
+
+    val settingsGradleFile: File? by lazy {
+        val settingsGroovy = File(this.projectRoot, "settings.gradle")
+        val settingsKts = File(this.projectRoot, "settings.gradle.kts")
+        when {
+            settingsGroovy.isFile -> settingsGroovy
+            settingsKts.isFile -> settingsKts
+            else -> null
+        }
     }
 
     sealed class BuildScriptFileType {
@@ -140,16 +157,19 @@ class GradleProjectHelper(projectRoot: String) {
     }
 
     val projectName: String by lazy {
-        connection?.getModel(GradleProject::class.java)?.name
+        gradleProjectModel?.name
             ?: throw IllegalStateException("Illegal state! #connectToProject must be called before calling projectName.")
     }
 
-    val isSingleModule: Boolean by lazy {
-        connection?.getModel(GradleProject::class.java)?.children?.isEmpty()
+    val isPrimitiveSingleModuleProject: Boolean by lazy {
+        val modules = ideaProjectModel?.modules
             ?: throw IllegalStateException("Illegal state! #connectToProject must be called before calling isOneModule.")
+
+        modules.size == 1 && modules.getAt(0).contentRoots.getAt(0).rootDirectory == this.projectRoot
     }
 
     fun closeConnection() {
+        gradleProjectModel = null
         connection?.close() ?: throw IllegalStateException("Illegal state! #connectToProject must be called before #closeConnection.")
     }
 

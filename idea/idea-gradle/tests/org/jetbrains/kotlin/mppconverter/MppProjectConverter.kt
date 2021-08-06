@@ -44,6 +44,8 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
                     writeText(gph.getMultiplatformBuildScriptTextForThisProject())
                 }
 
+                gph.settingsGradleFile?.let { it.copyTo(File(multiplatformProjectDirectory, it.name)) }
+
                 setupProject()
                 WriteCommandAction.runWriteCommandAction(project) {
 
@@ -56,7 +58,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     }
 
-    var jvmProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/tests/success/LogDog-master"
+    var jvmProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/tests/success/du"
 
     var multiplatformProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/testsResults/${File(jvmProjectDirectory).name}_mpp"
 
