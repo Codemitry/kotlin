@@ -99,7 +99,7 @@ ${sourceSetsSection.withIndent(1)}
             append(configuration); append(" ")
             append(
                 when (this@presentableView) {
-                    is ModuleDependency -> "project(\"$moduleNotation\")"
+                    is ModuleDependency -> "project(\":$moduleNotation\")"
                     is ExternalDependency -> "\"$artifact\""
                 }
             )
