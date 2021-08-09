@@ -25,26 +25,24 @@ import java.io.File
 
 class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
+    // TODO: write plugin version only for roots build scripts
+    // TODO: enhance mechanism getting repositories (root build script, for example in allprojects {} section )
+
     @Test
     fun main() {
-
-        assertGradleOneModuleProjectStructure()
-
-        val gph = GradleProjectHelper(jvmProjectDirectory)
-        gph.connectToProject(project)
 
         File(multiplatformProjectDirectory).deleteRecursively()
         File(multiplatformProjectDirectory).mkdirs()
 
+        val gph = GradleProjectHelper(jvmProjectDirectory)
+        gph.connectToProject(project)
+
         ApplicationManager.getApplication().invokeLater {
             ApplicationManager.getApplication().readAction {
 
-                File(multiplatformProjectDirectory, gph.getBuildScriptFileNameForThisProject()).apply {
-                    createNewFile()
-                    writeText(gph.getMultiplatformBuildScriptTextForThisProject())
-                }
+                gph.createMppModulesStructureAtPath(multiplatformProjectDirectory)
 
-                gph.settingsGradleFile?.let { it.copyTo(File(multiplatformProjectDirectory, it.name)) }
+                error("We can't convert multimodule projects now. In process..")
 
                 setupProject()
                 WriteCommandAction.runWriteCommandAction(project) {
@@ -58,7 +56,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     }
 
-    var jvmProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/tests/success/du"
+    var jvmProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/tests/multimodule/jvm"
 
     var multiplatformProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/testsResults/${File(jvmProjectDirectory).name}_mpp"
 
@@ -184,6 +182,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
     }
 
 
+    @Deprecated("Target: multimodule projects")
     private fun assertGradleOneModuleProjectStructure() {
         // TODO migrate check to Gradle Tooling API
         val root = File(jvmProjectDirectory)

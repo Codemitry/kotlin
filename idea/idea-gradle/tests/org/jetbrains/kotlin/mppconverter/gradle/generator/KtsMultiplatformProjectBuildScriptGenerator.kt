@@ -17,7 +17,7 @@ class KtsMultiplatformProjectBuildScriptGenerator : MultiplatformProjectBuildScr
             ""
         else """
 dependencies {
-${sourceSetDependencies(sourceSet)!!.joinToString("\n") { "${it.configuration}(\"${it.scheme}\")".withIndent(1) }}
+${sourceSetDependencies(sourceSet)!!.joinToString("\n") { it.presentableView().withIndent(1) }}
 }
         """.trimIndent()
 
@@ -92,4 +92,18 @@ ${sourceSetsSection.withIndent(1)}
     """.trimIndent()
 
     override fun toString(): String = generate()
+
+    override fun Dependency.presentableView(): String {
+        return buildString {
+            append(configuration)
+            append("(")
+            append(
+                when (this@presentableView) {
+                    is ModuleDependency -> "project(\"$moduleNotation\")"
+                    is ExternalDependency -> "\"$artifact\""
+                }
+            )
+            append(")")
+        }
+    }
 }

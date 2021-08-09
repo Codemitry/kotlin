@@ -70,4 +70,6 @@ abstract class MultiplatformProjectBuildScriptGenerator {
     fun sourceSetDependencies(sourceSet: String): List<Dependency>? = sourceSetsDependencies[sourceSet]?.toList()
 
     fun String.withIndent(indent: Int): String = lines().joinToString("\n") { "${"\t".repeat(indent)}$it" }
+
+    abstract fun Dependency.presentableView(): String
 }

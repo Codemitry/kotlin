@@ -5,4 +5,9 @@
 
 package org.jetbrains.kotlin.mppconverter.gradle.generator
 
-data class Dependency(val scheme: String, val configuration: String)
+
+sealed class Dependency(val depName: String, val configuration: String)
+
+class ExternalDependency(val artifact: String, configuration: String) : Dependency(artifact, configuration)
+
+class ModuleDependency(val moduleNotation: String, configuration: String) : Dependency(moduleNotation, configuration)

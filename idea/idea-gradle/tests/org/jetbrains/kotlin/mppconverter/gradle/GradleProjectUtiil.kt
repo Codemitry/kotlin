@@ -6,6 +6,8 @@
 package org.jetbrains.kotlin.mppconverter.gradle
 
 import org.jetbrains.kotlin.mppconverter.gradle.generator.Dependency
+import org.jetbrains.kotlin.mppconverter.gradle.generator.ExternalDependency
+import org.jetbrains.kotlin.mppconverter.gradle.generator.ModuleDependency
 
 fun rawDependenciesToList(lines: List<String>, configuration: String): List<Dependency> {
     val dependencies = mutableListOf<Dependency>()
@@ -17,10 +19,27 @@ fun rawDependenciesToList(lines: List<String>, configuration: String): List<Depe
     var lineIdx = firstDepLineIdx
     while (!lines[lineIdx].startsWith("\\---")) {
         if (lines[lineIdx].startsWith("+---"))
-            dependencies.add(Dependency(lines[lineIdx].substringAfter("+--- ").split(" ")[0], configuration))
+            dependencies.add(lines[lineIdx].substringAfter("+---").dependency(configuration))
         lineIdx++
     }
-    dependencies.add(Dependency(lines[lineIdx].substringAfter("\\--- ").split(" ")[0], configuration))
+    dependencies.add(lines[lineIdx].substringAfter("\\---").dependency(configuration))
 
     return dependencies
+}
+
+private fun String.dependency(configuration: String): Dependency {
+    val firstWord = firstWord()
+    return if (firstWord == "project")
+        ModuleDependency(substringAfter(firstWord).firstWord(), configuration)
+    else
+        ExternalDependency(firstWord, configuration)
+}
+
+private fun String.firstWord(): String {
+    val trimmed = trim()
+
+    var spaceIdx = 0
+    while (!trimmed[spaceIdx].isWhitespace()) spaceIdx++
+
+    return trimmed.substring(0 until spaceIdx)
 }
