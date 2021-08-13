@@ -11,6 +11,7 @@ import org.gradle.tooling.GradleConnector
 import org.gradle.tooling.ProjectConnection
 import org.gradle.tooling.ResultHandler
 import org.jetbrains.kotlin.mppconverter.gradle.generator.Dependency
+import org.jetbrains.kotlin.mppconverter.gradle.generator.ModuleDependency
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.coroutines.resume
@@ -60,11 +61,20 @@ class GradleDependenciesManager(gradleProjectPath: String) {
         val swappedOutputStream = ByteArrayOutputStream()
         build.setStandardOutput(swappedOutputStream)
 
-        build.withArguments("dependencies", "--configuration", configuration)
+        build.withArguments("-q", "dependencies", "--configuration", configuration)
         build.run(object : ResultHandler<Void> {
             override fun onComplete(p0: Void?) {
                 val lines = swappedOutputStream.toString("UTF-8").lines()
-                onSuccess(rawDependenciesToList(lines, configuration))
+                val dependencies = rawDependenciesToList(lines, configuration).toMutableList()
+                dependencies.withIndex().forEach {
+                    if (it.value is ModuleDependency) {
+                        dependencies[it.index] = ModuleDependency(
+                            refineModulePathSynchronously((it.value as ModuleDependency).moduleNotation),
+                            it.value.configuration
+                        )
+                    }
+                }
+                onSuccess(dependencies)
             }
 
             override fun onFailure(e: GradleConnectionException?) {
@@ -73,6 +83,43 @@ class GradleDependenciesManager(gradleProjectPath: String) {
             }
         })
         closeConnection()
+    }
+
+    fun refineModulePathSynchronously(moduleName: String) = runBlocking {
+        refineModulePath(moduleName)
+    }
+
+    suspend fun refineModulePath(moduleName: String): String = suspendCoroutine { cont ->
+        refineModulePathAsync(moduleName, onSuccess = { cont.resume(it) }, onFail = { cont.resumeWithException(it) })
+    }
+
+    fun refineModulePathAsync(
+        moduleName: String,
+        onSuccess: (String) -> Unit,
+        onFail: (t: Throwable) -> Unit
+    ) {
+        val connectedEarly = connection == null
+        if (!connectedEarly) connect()
+
+        val build = connection?.newBuild()
+            ?: throw IllegalStateException("Illegal state! #connect must be called before #loadDependensies.")
+
+        val swappedOutputStream = ByteArrayOutputStream()
+        build.setStandardOutput(swappedOutputStream)
+
+        build.withArguments("-q", "dependencyInsight", "--dependency", moduleName)
+        build.run(object : ResultHandler<Void> {
+            override fun onComplete(p0: Void?) {
+                val lines = swappedOutputStream.toString("UTF-8").lines()
+                onSuccess(rawDependencyInsightToModuleName(lines))
+            }
+
+            override fun onFailure(e: GradleConnectionException?) {
+                System.err.println("failure on refine module $moduleName for project: $e")
+                onFail(e ?: Exception("Unknown error"))
+            }
+        })
+        if (!connectedEarly) closeConnection()
     }
 
 

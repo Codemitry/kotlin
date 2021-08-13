@@ -39,7 +39,8 @@ class GradleProjectHelper(projectRoot: String) {
 
         modulesHelpers.clear()
         ideaProjectModel?.modules?.forEach { module ->
-            modulesHelpers.add(ModuleHelper(module, usingProject))
+            if (module.contentRoots.getAt(0).sourceDirectories.isNotEmpty())
+                modulesHelpers.add(ModuleHelper(module, usingProject))
         }
     }
 
@@ -79,10 +80,7 @@ class GradleProjectHelper(projectRoot: String) {
 
         modulesHelpers.forEach {
             val mppModulePath = mppPath + it.modulePath.substringAfter(projectRoot.absolutePath)
-
-            if (it.module.contentRoots.getAt(0).sourceDirectories.isNotEmpty()) {
-                it.createBuildScriptForMppAtPath(mppModulePath)
-            }
+            it.createBuildScriptForMppAtPath(mppModulePath)
         }
     }
 
@@ -97,7 +95,7 @@ class GradleProjectHelper(projectRoot: String) {
 
 const val multiplatformPluginVersion = "1.5.10"
 
-fun multiplatformPlugin(buildScript: BuildScriptFileType): String = when (buildScript) {
-    BuildScriptFileType.KotlinScript -> "kotlin(\"multiplatform\") version \"$multiplatformPluginVersion\""
-    BuildScriptFileType.GroovyScript -> "id 'org.jetbrains.kotlin.multiplatform' version '$multiplatformPluginVersion'"
+fun multiplatformPlugin(buildScript: BuildScriptFileType, withVersion: Boolean = true): String = when (buildScript) {
+    BuildScriptFileType.KotlinScript -> "kotlin(\"multiplatform\") ${if (withVersion) "version \"$multiplatformPluginVersion\"" else ""}"
+    BuildScriptFileType.GroovyScript -> "id 'org.jetbrains.kotlin.multiplatform' ${if (withVersion) "version '$multiplatformPluginVersion'" else ""}"
 }

@@ -35,11 +35,19 @@ private fun String.dependency(configuration: String): Dependency {
         ExternalDependency(firstWord, configuration)
 }
 
+fun rawDependencyInsightToModuleName(lines: List<String>): String {
+    val firstWord = lines[0].firstWord()
+    if (firstWord != "project") throw IllegalArgumentException("The dependency insight was called is not for the module!")
+
+    return lines[0].substring(firstWord.length).firstWord()
+}
+
+
 private fun String.firstWord(): String {
     val trimmed = trim()
 
     var spaceIdx = 0
-    while (!trimmed[spaceIdx].isWhitespace()) spaceIdx++
+    while (spaceIdx < trimmed.length && !trimmed[spaceIdx].isWhitespace()) spaceIdx++
 
     return trimmed.substring(0 until spaceIdx)
 }

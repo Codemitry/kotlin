@@ -25,9 +25,6 @@ import java.io.File
 
 class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
-    // TODO: write plugin version only for roots build scripts
-    // TODO: enhance mechanism getting repositories (root build script, for example in allprojects {} section )
-
     @Test
     fun main() {
 
@@ -56,7 +53,7 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
 
     }
 
-    var jvmProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/tests/multimodule/jvm"
+    var jvmProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/tests/multimodule/CoroutinesCamp-master"
 
     var multiplatformProjectDirectory: String = "/Users/Dmitry.Sokolov/ideaProjects/testsResults/${File(jvmProjectDirectory).name}_mpp"
 
@@ -179,26 +176,6 @@ class MppProjectConverter : MultiplePluginVersionGradleImportingTestCase() {
         }
         virtualTmpCommonDirectory.delete(this)
         virtualTmpJvmDirectory.delete(this)
-    }
-
-
-    @Deprecated("Target: multimodule projects")
-    private fun assertGradleOneModuleProjectStructure() {
-        // TODO migrate check to Gradle Tooling API
-        val root = File(jvmProjectDirectory)
-        if (!root.exists()) throw IllegalArgumentException("Project directory does not exist")
-
-        val buildGradle = File(root, "build.gradle")
-        val buildGradleKts = File(root, "build.gradle.kts")
-        if (!buildGradle.exists() && !buildGradleKts.exists()) throw IllegalArgumentException("build.gradle does not exist")
-
-        val src = File(root, "src")
-        if (!src.exists()) throw IllegalArgumentException("src directory does not exist")
-
-        val mainSourceSet = File(src, "main")
-        if (!mainSourceSet.exists()) throw IllegalArgumentException("main source set does not exist")
-
-        if (!File(mainSourceSet, "kotlin").exists()) throw IllegalArgumentException("main/kotlin  does not exist")
     }
 
 

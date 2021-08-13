@@ -63,11 +63,19 @@ class ModuleHelper(val module: IdeaModule, val project: Project) {
                 JsTarget()
             )
 
-            setPlugins(multiplatformPlugin(buildScriptFileType))
+            setPlugins(multiplatformPlugin(buildScriptFileType, isRootModule))
 
             setDependenciesToSourceSet("commonMain", dependencies)
             setDependenciesToSourceSet("jvmMain", dependencies)
             setDependenciesToSourceSet("jsMain", dependencies)
         }.generate()
     }
+
+    val isRootModule: Boolean
+        get() {
+            val allModules =
+                module.project.modules.toList().minus(module).filter { it.contentRoots.getAt(0).sourceDirectories.isNotEmpty() }
+
+            return allModules.any { modulePath.startsWith(it.contentRoots.getAt(0).rootDirectory.absolutePath + File.separator) }.not()
+        }
 }
