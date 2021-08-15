@@ -9,6 +9,7 @@ import com.intellij.openapi.project.Project
 import org.gradle.tooling.GradleConnector
 import org.gradle.tooling.ProjectConnection
 import org.gradle.tooling.model.GradleProject
+import org.gradle.tooling.model.idea.IdeaModule
 import org.gradle.tooling.model.idea.IdeaProject
 import java.io.File
 
@@ -60,6 +61,7 @@ class GradleProjectHelper(projectRoot: String) {
             ?: throw IllegalStateException("Illegal state! #connectToProject must be called before calling projectName.")
     }
 
+    @Deprecated("useless")
     val isPrimitiveSingleModuleProject: Boolean by lazy {
         val modules = ideaProjectModel?.modules
             ?: throw IllegalStateException("Illegal state! #connectToProject must be called before calling isOneModule.")
@@ -67,22 +69,30 @@ class GradleProjectHelper(projectRoot: String) {
         modules.size == 1 && modules.getAt(0).contentRoots.getAt(0).rootDirectory == this.projectRoot
     }
 
-    fun walkModules(action: (moduleRoot: File, sourcesRoot: File) -> Unit) {
+    fun walkModules(action: (module: IdeaModule, moduleRoot: File, sourcesRoot: File) -> Unit) {
         ideaProjectModel?.modules?.forEach { module ->
             val contentRoot = module.contentRoots.getAt(0)
-            action(contentRoot.rootDirectory, contentRoot.sourceDirectories.find { it.directory.name == "kotlin" }!!.directory)
+            contentRoot.sourceDirectories.find { it.directory.name == "kotlin" }?.directory?.let {
+                action(module, contentRoot.rootDirectory, it)
+            }
         }
     }
 
-
-    fun createMppModulesStructureAtPath(mppPath: String) {
-        settingsGradleFile?.let { it.copyTo(File(mppPath, it.name)) }
-
+    fun importProjectFiles() {
         modulesHelpers.forEach {
-            val mppModulePath = mppPath + it.modulePath.substringAfter(projectRoot.absolutePath)
-            it.createBuildScriptForMppAtPath(mppModulePath)
+            it.importFilesToJvmSources()
         }
     }
+
+
+//    fun createMppModulesStructureAtPath(mppPath: String) {
+//        settingsGradleFile?.let { it.copyTo(File(mppPath, it.name)) }
+//
+//        modulesHelpers.forEach {
+//            val mppModulePath = mppPath + it.modulePath.substringAfter(projectRoot.absolutePath)
+//            it.createBuildScriptForMppAtPath(mppModulePath)
+//        }
+//    }
 
 
     fun closeConnection() {
@@ -93,9 +103,9 @@ class GradleProjectHelper(projectRoot: String) {
 
 }
 
-const val multiplatformPluginVersion = "1.5.10"
-
-fun multiplatformPlugin(buildScript: BuildScriptFileType, withVersion: Boolean = true): String = when (buildScript) {
-    BuildScriptFileType.KotlinScript -> "kotlin(\"multiplatform\") ${if (withVersion) "version \"$multiplatformPluginVersion\"" else ""}"
-    BuildScriptFileType.GroovyScript -> "id 'org.jetbrains.kotlin.multiplatform' ${if (withVersion) "version '$multiplatformPluginVersion'" else ""}"
-}
+//const val multiplatformPluginVersion = "1.5.10"
+//
+//fun multiplatformPlugin(buildScript: BuildScriptFileType, withVersion: Boolean = true): String = when (buildScript) {
+//    BuildScriptFileType.KotlinScript -> "kotlin(\"multiplatform\") ${if (withVersion) "version \"$multiplatformPluginVersion\"" else ""}"
+//    BuildScriptFileType.GroovyScript -> "id 'org.jetbrains.kotlin.multiplatform' ${if (withVersion) "version '$multiplatformPluginVersion'" else ""}"
+//}
