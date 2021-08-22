@@ -6,11 +6,11 @@
 package org.jetbrains.kotlin.mppconverter.typespecifiyng
 
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
-import org.jetbrains.kotlin.idea.imports.canBeReferencedViaImport
 import org.jetbrains.kotlin.mppconverter.getDeepJetTypeFqName
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.getAbbreviation
 
 object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
 
@@ -24,7 +24,7 @@ object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
         if (property.getter?.initializer is KtObjectLiteralExpression)
             return
 
-        val typeReference = property.resolveToDescriptorIfAny()?.type?.let { KtPsiFactory(property).createFqType(it) }
+        val typeReference = property.resolveToDescriptorIfAny()?.type?.getAbbreviationOrType()?.let { KtPsiFactory(property).createFqType(it) }
         property.typeReference = typeReference
     }
 
@@ -36,7 +36,7 @@ object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
         if (function.initializer is KtObjectLiteralExpression)
             return
 
-        val typeReference = function.resolveToDescriptorIfAny()?.returnType?.let { KtPsiFactory(function).createFqType(it) }
+        val typeReference = function.resolveToDescriptorIfAny()?.returnType?.getAbbreviationOrType()?.let { KtPsiFactory(function).createFqType(it) }
         function.typeReference = typeReference
     }
 
@@ -68,8 +68,8 @@ object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
             return
 
         val objectType = when {
-            property != null -> property.resolveToDescriptorIfAny()?.returnType ?: error("Type of property has not resolved! (Explicit Type Specifier)")
-            function != null -> function.resolveToDescriptorIfAny()?.returnType ?: error("Type of function has not resolved! (Explicit Type Specifier)")
+            property != null -> property.resolveToDescriptorIfAny()?.type?.getAbbreviationOrType() ?: error("Type of property has not resolved! (Explicit Type Specifier)")
+            function != null -> function.resolveToDescriptorIfAny()?.returnType?.getAbbreviationOrType() ?: error("Type of function has not resolved! (Explicit Type Specifier)")
             else -> return // expression may be not assignable
         }
 
@@ -83,15 +83,12 @@ object KtExplicitTypeSpecifierVisitor : KtTreeVisitorVoid() {
 
     private fun KtPsiFactory.createFqType(type: KotlinType): KtTypeReference {
         val typeText = buildString {
-            append(
-                if (type.canBeReferencedViaImport())
-                    type.getDeepJetTypeFqName(true) + if (type.isMarkedNullable) "?" else ""
-                else
-                    type.toString()
-            )
+            append(type.getDeepJetTypeFqName(true))
         }
         return createType(typeText)
     }
 }
 
-fun KtFile.acceptExplicitTypeSpecifier() = this.accept(KtExplicitTypeSpecifierVisitor)
+fun KotlinType.getAbbreviationOrType() = getAbbreviation() ?: this
+
+fun KtFile.acceptExplicitTypeSpecifier() = accept(KtExplicitTypeSpecifierVisitor)

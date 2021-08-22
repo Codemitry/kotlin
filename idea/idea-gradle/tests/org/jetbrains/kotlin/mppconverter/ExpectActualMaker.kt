@@ -70,8 +70,10 @@ class ExpectActualMaker(val file: KtFile) {
             if (dcl.isResolvable()) {
                 expectFile.addWithEndedNL(dcl.copy())
                 dcl.delete()
-                if (dcl.isPrivate())
-                /* TODO replace it with extension in future */;
+                if (dcl.isPrivate()) {
+                    actualFile.addWithEndedNL(dcl.copy())
+                    actualTODOFile.addWithEndedNL(dcl.copy())
+                }
             } else {
                 if (dcl.isExpectizingAllowed()) {
                     expectFile.addWithEndedNL((dcl.copy() as KtDeclaration).toExpect())
