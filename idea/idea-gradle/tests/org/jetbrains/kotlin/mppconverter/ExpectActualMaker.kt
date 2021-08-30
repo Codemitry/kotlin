@@ -56,35 +56,33 @@ class ExpectActualMaker(val file: KtFile) {
 
 
         file.packageDirective?.let {
-            expectFile.addWithEndedNL(it)
-            actualFile.addWithEndedNL(it)
-            actualTODOFile.addWithEndedNL(it)
+            expectFile.addWithEndedNL(it, 1)
+            if (actualFile.packageDirective == null || actualFile.packageDirective?.text?.isEmpty() == true) actualFile.addWithEndedNL(it, 1)
+            actualTODOFile.addWithEndedNL(it, 1)
         }
         file.importList?.let {
-            expectFile.addWithEndedNL(it)
-            actualFile.addWithEndedNL(it)
-            actualTODOFile.addWithEndedNL(it)
+            expectFile.addWithEndedNL(it, 1)
+            if (actualFile.importList == null || actualFile.importList?.text?.isEmpty() == true) actualFile.addWithEndedNL(it, 1)
+            actualTODOFile.addWithEndedNL(it, 1)
         }
 
         file.declarations.forEach { dcl ->
-            if (dcl.isResolvable()) {
-                expectFile.addWithEndedNL(dcl.copy())
-                dcl.delete()
+            if (dcl.isResolvable) {
+                expectFile.addWithEndedNL(dcl.copy(), 1)
                 if (dcl.isPrivate()) {
-                    actualFile.addWithEndedNL(dcl.copy())
-                    actualTODOFile.addWithEndedNL(dcl.copy())
+                    actualFile.addWithEndedNL(dcl.copy(), 1)
+                    actualTODOFile.addWithEndedNL(dcl.copy(), 1)
                 }
             } else {
                 if (dcl.isExpectizingAllowed()) {
-                    expectFile.addWithEndedNL((dcl.copy() as KtDeclaration).toExpect())
-                    actualFile.addWithEndedNL((dcl.copy() as KtDeclaration).toActual())
-                    actualTODOFile.addWithEndedNL((dcl.copy() as KtDeclaration).toActualWithTODOs())
-                    dcl.delete()
+                    expectFile.addWithEndedNL((dcl.copy() as KtDeclaration).toExpect(), 1)
+                    actualFile.addWithEndedNL((dcl.copy() as KtDeclaration).toActual(), 1)
+                    actualTODOFile.addWithEndedNL((dcl.copy() as KtDeclaration).toActualWithTODOs(), 1)
                 } else {
-                    actualFile.addWithEndedNL(dcl.copy())
-                    dcl.delete()
+                    actualFile.addWithEndedNL(dcl.copy(), 1)
                 }
             }
+            dcl.delete()
 
         }
 
