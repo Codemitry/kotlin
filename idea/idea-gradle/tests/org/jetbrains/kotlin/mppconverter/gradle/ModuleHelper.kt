@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.mppconverter.gradle
 
 import com.intellij.openapi.module.Module
+import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.module.impl.scopes.ModulesScope
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -14,35 +15,19 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.search.FileTypeIndex
 import org.gradle.tooling.model.idea.IdeaModule
+import org.jetbrains.kotlin.analyzer.moduleInfo
 import org.jetbrains.kotlin.idea.KotlinFileType
+import org.jetbrains.kotlin.idea.configuration.getWholeModuleGroup
+import org.jetbrains.kotlin.idea.project.getStableName
 import org.jetbrains.kotlin.idea.util.projectStructure.getModuleDir
+import org.jetbrains.kotlin.idea.util.projectStructure.module
 import org.jetbrains.kotlin.psi.KtFile
 import java.io.File
 
 class ModuleHelper(val module: IdeaModule, val project: Project) {
-    private val gradleProject = module.gradleProject
 
     val modulePath = module.contentRoots.getAt(0).rootDirectory.absolutePath
 
-    val buildScript = gradleProject.buildScript.sourceFile!!
-//    val buildScriptFileType = buildScriptFileTypeFor(buildScript)
-
-//    private val buildScriptParser: BuildScriptParser
-//    private val mppBuildScriptGenerator: MultiplatformProjectBuildScriptGenerator
-//    private val depsManager = GradleDependenciesManager(module.contentRoots.getAt(0).rootDirectory.absolutePath)
-
-//    init {
-//        when (buildScriptFileType) {
-//            BuildScriptFileType.KotlinScript -> {
-//                buildScriptParser = KtsBuildScriptParser(project, buildScript.absolutePath)
-//                mppBuildScriptGenerator = KtsMultiplatformProjectBuildScriptGenerator()
-//            }
-//            BuildScriptFileType.GroovyScript -> {
-//                buildScriptParser = GroovyBuildScriptParser(project, buildScript.absolutePath)
-//                mppBuildScriptGenerator = GroovyMultiplatformProjectBuildScriptGenerator()
-//            }
-//        }
-//    }
 
     val commonMain: File by lazy { File("$modulePath${File.separator}src", "commonMain").apply { mkdirs() } }
     val commonMainSources: File by lazy { File(commonMain, "kotlin").apply { mkdir() } }
@@ -64,53 +49,15 @@ class ModuleHelper(val module: IdeaModule, val project: Project) {
     val tmpJvmMain: File by lazy { File(jvmMainSources, tmpDirName).apply { mkdir() } }
 
     fun importFilesToJvmSources() {
-        val jvmModuleSources = module.contentRoots.getAt(0).sourceDirectories.find { it.directory.name == "kotlin" }!!.directory
+        val jvmModuleSources = module.contentRoots.getAt(0).sourceDirectories.find { it.directory.name == "kotlin" }?.directory
+
+        if (jvmModuleSources?.exists() != true) return
+
         jvmModuleSources.copyRecursively(tmpJvmMain)
 
-        jvmModuleSources.parentFile.deleteRecursively()
+        jvmModuleSources.parentFile?.deleteRecursively()
         File("$modulePath/src", "test").deleteRecursively()
     }
-
-
-//    fun createBuildScriptForMppAtPath(path: String) {
-//        File(path, buildScript.name).apply {
-//            parentFile.mkdirs()
-//            createNewFile()
-//            writeText(getBuildScriptTextForMppProject())
-//        }
-//    }
-
-//    fun getBuildScriptTextForMppProject(): String {
-//
-//        val dependencies = depsManager.getDependenciesSynchronously("implementation")
-//            .concat(depsManager.getDependenciesSynchronously("compileOnly"))
-//            .concat(depsManager.getDependenciesSynchronously("runtimeOnly"))
-//            .concat(depsManager.getDependenciesSynchronously("api"))!!
-//            .toList()
-//
-//        buildScriptParser.getRepositoriesSectionInside()?.let { mppBuildScriptGenerator.setRepositories(it) }
-//
-//        return mppBuildScriptGenerator.apply {
-//            setTargets(
-//                JvmTarget(),
-//                JsTarget()
-//            )
-//
-//            setPlugins(multiplatformPlugin(buildScriptFileType, isRootModule))
-//
-//            setDependenciesToSourceSet("commonMain", dependencies)
-//            setDependenciesToSourceSet("jvmMain", dependencies)
-//            setDependenciesToSourceSet("jsMain", dependencies)
-//        }.generate()
-//    }
-
-//    val isRootModule: Boolean
-//        get() {
-//            val allModules =
-//                module.project.modules.toList().minus(module).filter { it.contentRoots.getAt(0).sourceDirectories.isNotEmpty() }
-//
-//            return allModules.any { modulePath.startsWith(it.contentRoots.getAt(0).rootDirectory.absolutePath + File.separator) }.not()
-//        }
 }
 
 fun Module.allKotlinFiles(): List<KtFile> {
@@ -121,14 +68,22 @@ fun Module.allKotlinFiles(): List<KtFile> {
         .filterIsInstance<KtFile>()
 }
 
+fun org.jetbrains.kotlin.descriptors.ModuleDescriptor.isCommonModuleForThisProject(project: Project): Boolean {
+    return ModuleManager.getInstance(project).findModuleByName(moduleInfo?.displayedName ?: "")?.isCommon ?: false
+}
+
+fun KtFile.isInCommonMainSources(): Boolean = module?.commonMainSources?.path?.let { return this.virtualFilePath.startsWith(it) } ?: false
+
+
+val Module.isCommon: Boolean
+    get() = /*this.platform?.isCommon() ?:*/ (getStableName().asString() == "<${getWholeModuleGroup().baseModule.name}_commonMain>" ||
+            getStableName().asString() == "<${getWholeModuleGroup().baseModule.name}_commonTest>")
+
 val Module.commonMainSources: VirtualFile
     get() = VfsUtil.createDirectoryIfMissing(LocalFileSystem.getInstance().findFileByPath(getModuleDir())!!, "src/commonMain/kotlin")
 
 val Module.jvmMainSources: VirtualFile
     get() = VfsUtil.createDirectoryIfMissing(LocalFileSystem.getInstance().findFileByPath(getModuleDir())!!, "src/jvmMain/kotlin")
-//        .("src")!!
-//        .findChild("jvmMain")!!
-//        .findChild("kotlin")!!
 
 val Module.jsMainSources: VirtualFile
     get() = VfsUtil.createDirectoryIfMissing(LocalFileSystem.getInstance().findFileByPath(getModuleDir())!!, "src/jsMain/kotlin")

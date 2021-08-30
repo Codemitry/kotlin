@@ -52,6 +52,12 @@ object KtActualMakerVisitorVoid : KtTreeVisitorVoid() {
 
         klass.addModifier(ACTUAL_KEYWORD)
     }
+
+    override fun visitObjectDeclaration(declaration: KtObjectDeclaration) {
+        super.visitObjectDeclaration(declaration)
+
+        declaration.addModifier(ACTUAL_KEYWORD)
+    }
 }
 
 fun KtDeclaration.makeActual() = accept(KtActualMakerVisitorVoid)

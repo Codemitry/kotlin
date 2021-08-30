@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.lexer.KtTokens.DATA_KEYWORD
 import org.jetbrains.kotlin.lexer.KtTokens.EXPECT_KEYWORD
 import org.jetbrains.kotlin.mppconverter.createKtParameterFromProperty
 import org.jetbrains.kotlin.mppconverter.createKtPropertyWithoutInitializer
+import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.isPropertyParameter
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
@@ -115,6 +116,20 @@ object KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
                 }
             }
         }
+    }
+
+    override fun visitSuperTypeCallEntry(call: KtSuperTypeCallEntry) {
+        super.visitSuperTypeCallEntry(call)
+
+        call.valueArgumentList?.delete()
+        call.lambdaArguments.forEach { it.delete() }
+    }
+
+    override fun visitAnnotationEntry(annotationEntry: KtAnnotationEntry) {
+        super.visitAnnotationEntry(annotationEntry)
+
+        if (annotationEntry.isNotResolvable())
+            annotationEntry.delete()
     }
 
     private fun KtClassBody.addInside(element: PsiElement) {

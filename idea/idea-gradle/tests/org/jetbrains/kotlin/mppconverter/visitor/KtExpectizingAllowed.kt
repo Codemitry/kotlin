@@ -5,9 +5,11 @@
 
 package org.jetbrains.kotlin.mppconverter.visitor
 
+import org.jetbrains.kotlin.idea.util.hasInlineModifier
 import org.jetbrains.kotlin.idea.util.hasPrivateModifier
 import org.jetbrains.kotlin.idea.util.ifTrue
 import org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD
+import org.jetbrains.kotlin.lexer.KtTokens.VALUE_KEYWORD
 import org.jetbrains.kotlin.mppconverter.resolvers.*
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.isTopLevelKtOrJavaMember
@@ -22,7 +24,7 @@ private object KtExpectizingCheckVisitor : KtVisitor<Boolean, Unit>() {
 
     override fun visitNamedFunction(function: KtNamedFunction, data: Unit): Boolean = function.isResolvableSignature()
 
-    override fun visitTypeAlias(typeAlias: KtTypeAlias, data: Unit): Boolean = typeAlias.isResolvable()
+    override fun visitTypeAlias(typeAlias: KtTypeAlias, data: Unit): Boolean = typeAlias.isResolvable
 
     override fun visitObjectDeclaration(dcl: KtObjectDeclaration, data: Unit): Boolean {
         dcl.primaryConstructor?.isNotResolvable()?.ifTrue { return false }
@@ -33,6 +35,9 @@ private object KtExpectizingCheckVisitor : KtVisitor<Boolean, Unit>() {
         klass.getSuperTypeList()?.isNotResolvable()?.ifTrue { return false }
 
         if (klass.isEnum() && (klass.hasPrimaryConstructor() || klass.secondaryConstructors.isNotEmpty())) return false
+
+        // deprecated modifier inline
+        if (klass.hasInlineModifier() || klass.hasModifier(VALUE_KEYWORD)) return false
 
         klass.primaryConstructor?.isNotResolvable()?.ifTrue { return false }
         klass.secondaryConstructors.any { it.isNotResolvable() }.ifTrue { return false }
@@ -55,5 +60,9 @@ fun KtDeclaration.isExpectizingAllowed(): Boolean {
 
 fun KtDeclaration.isExpectizingDenied(): Boolean = !isExpectizingAllowed()
 
+
+@Deprecated("Use KtDeclaration.isExpectizingAllowed()")
 fun KtFile.isExpectizingAllowed(): Boolean = declarations.any { !it.hasPrivateModifier() && it.isExpectizingAllowed() }
+
+@Deprecated("Use KtDeclaration.isExpectizingDenied()")
 fun KtFile.isExpectizingDenied(): Boolean = declarations.all { it.hasPrivateModifier() || it.isExpectizingDenied() }

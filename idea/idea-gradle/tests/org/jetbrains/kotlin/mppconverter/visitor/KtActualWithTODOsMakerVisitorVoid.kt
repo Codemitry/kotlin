@@ -45,6 +45,12 @@ object KtActualWithTODOsMakerVisitorVoid : KtTreeVisitorVoid() {
         super.visitClass(klass)
     }
 
+    override fun visitObjectDeclaration(declaration: KtObjectDeclaration) {
+        declaration.addModifier(ACTUAL_KEYWORD)
+
+        super.visitObjectDeclaration(declaration)
+    }
+
     override fun visitPrimaryConstructor(constructor: KtPrimaryConstructor) {
         super.visitPrimaryConstructor(constructor)
 

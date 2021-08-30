@@ -2,6 +2,7 @@ package org.jetbrains.kotlin.mppconverter
 
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.idea.imports.importableFqName
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.types.KotlinType
@@ -68,9 +69,9 @@ fun KotlinType.getDeepJetTypeFqName(printTypeArguments: Boolean): String {
     val declaration = requireNotNull(constructor.declarationDescriptor) {
         "declarationDescriptor is null for constructor = $constructor with ${constructor.javaClass}"
     }
-//    if (declaration is TypeParameterDescriptor) {
-//        return StringUtil.join(declaration.upperBounds, { type -> type.getDeepJetTypeFqName(printTypeArguments) }, "&")
-//    }
+    if (declaration is TypeParameterDescriptor) {
+        return declaration.name.asString() + if (isMarkedNullable) "?" else ""
+    }
 
     val typeArguments = arguments
 
@@ -91,7 +92,7 @@ fun KotlinType.getDeepJetTypeFqName(printTypeArguments: Boolean): String {
     return declaration.importableFqName?.asString() + if (isMarkedNullable) "?" else "" + argumentsAsString
 }
 
-fun KtElement.addWithEndedNL(elem: PsiElement) {
+fun KtElement.addWithEndedNL(elem: PsiElement, emptyLinesCount: Int = 0) {
     add(elem)
-    add(KtPsiFactory(this).createNewLine(2))
+    add(KtPsiFactory(this).createNewLine(emptyLinesCount + 1))
 }

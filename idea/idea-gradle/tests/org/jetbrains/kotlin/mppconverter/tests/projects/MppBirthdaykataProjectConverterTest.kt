@@ -37,12 +37,6 @@ wrapper {
     gradleVersion = "5.3.1"
 }
 
-//dependencies {
-//    testCompile 'com.willowtreeapps.assertk:assertk-jvm:0.13'
-//    testCompile 'org.junit.jupiter:junit-jupiter-api:5.4.2'
-//    testRuntime 'org.junit.jupiter:junit-jupiter-engine:5.4.2'
-
-//}
 
 kotlin {
     jvm()
@@ -51,7 +45,7 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
-                implementation(kotlin("stdlib"))
+//                implementation(kotlin("stdlib"))
                
             }
         }

@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.mppconverter
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
@@ -14,6 +15,7 @@ import org.gradle.tooling.model.idea.IdeaModule
 import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.debugger.readAction
 import org.jetbrains.kotlin.idea.test.allKotlinFiles
+import org.jetbrains.kotlin.idea.util.ifTrue
 import org.jetbrains.kotlin.idea.util.projectStructure.allModules
 import org.jetbrains.kotlin.idea.util.projectStructure.module
 import org.jetbrains.kotlin.mppconverter.gradle.*
@@ -21,8 +23,12 @@ import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
 import org.jetbrains.kotlin.mppconverter.resolvers.isResolvable
 import org.jetbrains.kotlin.mppconverter.tests.MppConverterTestCase
 import org.jetbrains.kotlin.mppconverter.typespecifiyng.acceptExplicitTypeSpecifier
+import org.jetbrains.kotlin.mppconverter.visitor.KtExpectMakerVisitorVoid.removeUnresolvableImports
 import org.jetbrains.kotlin.mppconverter.visitor.isExpectizingDenied
+import org.jetbrains.kotlin.psi.KtAnnotationEntry
+import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import java.io.File
 
 class MppProjectConverter(
@@ -76,20 +82,43 @@ class MppProjectConverter(
         }
     }
 
-    private fun moveAllFilesThatDependsOnJvmAndCantBeConvertedToCommon() {
-        var fullyJvmDependentFiles = testCase.project.allKotlinFiles().filter {
-            it.isInCommonSources() && it.isNotResolvable() && it.isResolvableWithJvmAnalyzer() && it.isExpectizingDenied()
-        }
+    private fun KtFile.allDeclarationsThatShouldBeMovedToPlatformSrc(): List<KtDeclaration> =
+        if (this.isInCommonSources())
+            declarations.filter { it.isNotResolvable() && it.isExpectizingDenied() }
+        else
+            emptyList()
 
-        while (fullyJvmDependentFiles.isNotEmpty()) {
-            fullyJvmDependentFiles.forEach {
-                VfsUtil.createDirectoryIfMissing(it.module!!.jvmMainSources.path + File.separator + it.packageToRelativePath())
-                it.virtualFile.move(this, it.module!!.jvmMainSources.findFileByRelativePath(it.packageToRelativePath())!!)
+    private fun Project.allKotlinFilesWithDeclarationsThatShouldBeMovedToPlatformSrc(): List<KtFile> =
+        allKotlinFiles().filter { it.isInCommonSources() && it.allDeclarationsThatShouldBeMovedToPlatformSrc().isNotEmpty() }
+
+
+    private fun moveAllFilesThatDependsOnJvmAndCantBeConvertedToCommon() {
+
+        var processingFiles: List<KtFile>
+        do {
+            processingFiles = testCase.project.allKotlinFilesWithDeclarationsThatShouldBeMovedToPlatformSrc()
+
+            processingFiles.forEach { file ->
+                val processingDcls = file.allDeclarationsThatShouldBeMovedToPlatformSrc().map { it.copy() }
+
+                val jvmKtFileParent = VfsUtil.createDirectoryIfMissing(file.module!!.jvmMainSources.path + VfsUtil.VFS_SEPARATOR + file.packageToRelativePath())!!
+
+                val jvmKtFileName = "${file.virtualFile.nameWithoutExtension}Jvm.${file.virtualFile.extension}"
+
+                val jvmKtFile = jvmKtFileParent.findOrCreateChildData(this, jvmKtFileName).toPsiFile(testCase.project) as KtFile
+
+
+                if (jvmKtFile.text.isEmpty()) {
+                    file.packageDirective?.let { jvmKtFile.addWithEndedNL(it, 1) }
+                    file.importList?.let { jvmKtFile.addWithEndedNL(it, 1) }
+                }
+
+                processingDcls.forEach { jvmKtFile.addWithEndedNL(it, 1) }
+                file.allDeclarationsThatShouldBeMovedToPlatformSrc().forEach { it.delete() }
             }
 
-            fullyJvmDependentFiles = testCase.project.allKotlinFiles()
-                .filter { it.isInCommonSources() && it.isNotResolvable() && it.isResolvableWithJvmAnalyzer() && it.isExpectizingDenied() }
-        }
+
+        } while (processingFiles.isNotEmpty())
     }
 
     private fun processFiles() {
@@ -97,38 +126,56 @@ class MppProjectConverter(
 
         testCase.project.allKotlinFiles().filter { it.isInCommonSources() }.forEach { jvmKtFile ->
 
-            if (jvmKtFile.isResolvable()) {
+            println("Check file $jvmKtFile")
+            if (jvmKtFile.isResolvable) {
                 // the file is fully resolvable with common-analyze => move it to common sources
+
+                // firstly delete unresolvable annotations
+                jvmKtFile.accept(object : KtTreeVisitorVoid() {
+                    override fun visitAnnotationEntry(annotationEntry: KtAnnotationEntry) {
+                        super.visitAnnotationEntry(annotationEntry)
+
+                        annotationEntry.typeReference?.isNotResolvable()?.ifTrue { annotationEntry.delete() }
+                    }
+                })
+
+                jvmKtFile.removeUnresolvableImports()
+
                 VfsUtil.createDirectoryIfMissing(jvmKtFile.module!!.commonMainSources.path + File.separator + jvmKtFile.packageToRelativePath())
                 jvmKtFile.virtualFile.move(this, jvmKtFile.module!!.commonMainSources.findFileByRelativePath(jvmKtFile.packageToRelativePath())!!)
             } else {
-
-                if (jvmKtFile.isExpectizingDenied()) {
-                    // the file is not resolvable with common-analyze and can be converted to expect/actual => move it to jvm sources
-                    VfsUtil.createDirectoryIfMissing(jvmKtFile.module!!.jvmMainSources.path + File.separator + jvmKtFile.packageToRelativePath())
-                    jvmKtFile.virtualFile.move(this, jvmKtFile.module!!.jvmMainSources.findFileByRelativePath(jvmKtFile.packageToRelativePath())!!)
-                } else {
                     // the file can be converted to expect/actual scheme
 
                     // only check to validity of resolving. Remove it after tests
-                    if (!jvmKtFile.isResolvableWithJvmAnalyzer())
-                        error("file $jvmKtFile is not resolvable with jvm analyzer!")
+//                    if (!jvmKtFile.isResolvableWithJvmAnalyzer) {
+//                        commitVirtualProjectFilesToPhysical()
+//                        error("file $jvmKtFile is not resolvable with jvm analyzer!")
+//                    }
 
-                    val expectActualMaker = ExpectActualMaker(jvmKtFile)
-                    expectActualMaker.generateFiles(
-                        jvmKtFile.module!!.commonMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
-                        jvmKtFile.name,
+                val expectActualMaker = ExpectActualMaker(jvmKtFile)
+                expectActualMaker.generateFiles(
+                    jvmKtFile.module!!.commonMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
+                    jvmKtFile.name,
 
-                        jvmKtFile.module!!.jvmMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
-                        "${jvmKtFile.virtualFile.nameWithoutExtension}Jvm.${jvmKtFile.virtualFile.extension}",
+                    jvmKtFile.module!!.jvmMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
+                    "${jvmKtFile.virtualFile.nameWithoutExtension}Jvm.${jvmKtFile.virtualFile.extension}",
 
-                        jvmKtFile.module!!.jsMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
-                        "${jvmKtFile.virtualFile.nameWithoutExtension}Js.${jvmKtFile.virtualFile.extension}"
+                    jvmKtFile.module!!.jsMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
+                    "${jvmKtFile.virtualFile.nameWithoutExtension}Js.${jvmKtFile.virtualFile.extension}"
+                )
+
+                if (expectActualMaker.expectFile.declarations.isEmpty()) {
+                    // all declarations must be in platform part. Then, remove expect file.
+                    expectActualMaker.expectFile.virtualFile.delete(this)
+                    expectActualMaker.actualFile.virtualFile.rename(
+                        this, expectActualMaker.actualFile.name.apply {
+                            dropLast("Jvm.kt".length) + ".kt"
+                        }
                     )
-
-                    jvmKtFile.virtualFile.delete(this)
+                    expectActualMaker.actualTODOFile.virtualFile.delete(this)
                 }
 
+                jvmKtFile.virtualFile.delete(this)
             }
 
         }
@@ -140,16 +187,16 @@ class MppProjectConverter(
 
     }
 
+    private val KtFile.isResolvableWithJvmAnalyzer: Boolean
+        get() {
+            val oldDir = virtualFile.directory()
+            val vdir = VfsUtil.createDirectoryIfMissing(module!!.tmpJvmDirectory, packageToRelativePath())
+            virtualFile.move(this, vdir)
+            val isResolvedWithJvmAnalyzer = isResolvable
+            virtualFile.move(this, oldDir)
 
-    private fun KtFile.isResolvableWithJvmAnalyzer(): Boolean {
-        val oldDir = virtualFile.directory()
-        val vdir = VfsUtil.createDirectoryIfMissing(module!!.tmpJvmDirectory, packageToRelativePath())
-        virtualFile.move(this, vdir)
-        val isResolvedWithJvmAnalyzer = isResolvable()
-        virtualFile.move(this, oldDir)
-
-        return isResolvedWithJvmAnalyzer
-    }
+            return isResolvedWithJvmAnalyzer
+        }
 
     private fun commitVirtualProjectFilesToPhysical() {
         testCase.projectFile.walkBottomUp().forEach { it.delete() }
