@@ -59,8 +59,8 @@ class ExpectActualMaker(val file: KtFile) {
 
             actualFile.packageDirective?.delete()
 
-            if (actualFile.children.isNotEmpty())
-                actualFile.addBeforeWithEndedNL(it.copy(), actualFile.children[0], 1)
+            if (actualFile.declarations.isNotEmpty())
+                actualFile.addBeforeWithEndedNL(it.copy(), actualFile.declarations[0], 1)
             else
                 actualFile.addWithEndedNL(it.copy(), 1)
 
@@ -71,8 +71,8 @@ class ExpectActualMaker(val file: KtFile) {
 
             actualFile.importList?.delete()
 
-            if (actualFile.children.isNotEmpty())
-                actualFile.addBeforeWithEndedNL(it.copy(), actualFile.children[0], 1)
+            if (actualFile.declarations.isNotEmpty())
+                actualFile.addBeforeWithEndedNL(it.copy(), actualFile.declarations[0], 1)
             else
                 actualFile.addWithEndedNL(it.copy(), 1)
 
