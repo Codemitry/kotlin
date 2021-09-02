@@ -9,10 +9,10 @@ import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
-import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.getReturnTypeReference
 import org.jetbrains.kotlin.idea.util.ifFalse
 import org.jetbrains.kotlin.idea.util.ifTrue
+import org.jetbrains.kotlin.js.descriptorUtils.getJetTypeFqName
 import org.jetbrains.kotlin.mppconverter.gradle.isCommonModuleForThisProject
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.bindingContextUtil.getAbbreviatedTypeOrType
@@ -26,7 +26,7 @@ import org.jetbrains.kotlin.types.typeUtil.containsError
 import org.jetbrains.kotlin.types.typeUtil.isTypeParameter
 import java.util.*
 
-private val calls = Stack<KotlinType>()
+private val calls = Stack<String>()
 
 class KtResolverVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
 
@@ -76,7 +76,7 @@ class KtResolverVisitor(val project: Project) : KtVisitor<Boolean, Unit>() {
     }
 
     override fun visitCallableReferenceExpression(expression: KtCallableReferenceExpression, data: Unit?): Boolean {
-        if (expression.callableReference.isNotResolvable()) return false
+        if (expression.callableReference.isNotResolvable) return false
         val type = expression.getType() ?: return false
         return type.isResolvable(project)
     }
@@ -122,34 +122,31 @@ fun KotlinType.isResolvable(project: Project): Boolean {
 
     if (this.isTypeParameter()) return true
 
-    if (calls.contains(this))
-        return true
+    val jetTypeFqName = getJetTypeFqName(false)
 
-    calls.push(this)
+    if (calls.contains(jetTypeFqName))
+        return true
 
     arguments.any { !it.isStarProjection && !it.type.isResolvable(project) }.ifTrue { return false }
 
+    calls.push(jetTypeFqName)
+
     val descriptor = this.constructor.declarationDescriptor ?: error("declaration descriptor of constructor of KotlinType is null")
 
-    println("${"\t".repeat(calls.size)}${toString()}\nstack: ${calls.joinToString(",")}")
     // two cases because two modules: x and production for module x can exist
     if (!descriptor.module.isCommonModuleForThisProject(project))
-        return true
+        return true.apply { calls.pop() }
 
 
     return (descriptor.source.getPsi() as? KtElement)!!.isResolvable.apply { calls.pop() }
 }
 
 
-fun KtProperty.isResolvableType(): Boolean {
-    typeReference?.let { return it.isResolvable }
-    return resolveToDescriptorIfAny()?.type?.isResolvable(project) == true
-}
-
 fun KtFunction.isResolvableSignature(): Boolean {
-    this.receiverTypeReference?.let { if (it.isNotResolvable()) return false }
-    this.valueParameters.forEach { if (it.isNotResolvable()) return false }
-    this.getReturnTypeReference()?.let { if (it.isNotResolvable()) return false } // if return type declared explicitly
+    receiverTypeReference?.let { if (it.isNotResolvable) return false }
+    valueParameters.forEach { if (it.isNotResolvable) return false }
+    typeParameterList?.isNotResolvable?.ifTrue { return false }
+    getReturnTypeReference()?.let { if (it.isNotResolvable) return false } // if return type declared explicitly
 
     return true
 }
@@ -164,4 +161,5 @@ fun KtFile.isNotResolvable(): Boolean = !isResolvable
 val KtElement.isResolvable: Boolean
     get() = this.accept(KtResolverVisitor(project), Unit)
 
-fun KtElement.isNotResolvable(): Boolean = !isResolvable
+val KtElement.isNotResolvable: Boolean
+    get() = !isResolvable

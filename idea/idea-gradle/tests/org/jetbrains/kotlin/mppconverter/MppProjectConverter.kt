@@ -29,6 +29,7 @@ import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
+import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 import java.io.File
 
 class MppProjectConverter(
@@ -84,13 +85,51 @@ class MppProjectConverter(
 
     private fun KtFile.allDeclarationsThatShouldBeMovedToPlatformSrc(): List<KtDeclaration> =
         if (this.isInCommonSources())
-            declarations.filter { it.isNotResolvable() && it.isExpectizingDenied() }
+            declarations.filter { it.isNotResolvable && it.isExpectizingDenied() }
         else
             emptyList()
 
-    private fun Project.allKotlinFilesWithDeclarationsThatShouldBeMovedToPlatformSrc(): List<KtFile> =
-        allKotlinFiles().filter { it.isInCommonSources() && it.allDeclarationsThatShouldBeMovedToPlatformSrc().isNotEmpty() }
+    private fun KtFile.hasDeclarationsThatShouldBeMovedToPlatformSrc(): Boolean =
+        if (this.isInCommonSources())
+            declarations.find { it.isNotResolvable && it.isExpectizingDenied() } != null
+        else
+            false
 
+    private fun Project.allKotlinFilesWithDeclarationsThatShouldBeMovedToPlatformSrc(): List<KtFile> =
+        allKotlinFiles().filter { it.isInCommonSources() && it.hasDeclarationsThatShouldBeMovedToPlatformSrc() }
+
+
+    private fun copyAllPrivateDeclarationsForPlatformDependentFiles() {
+        val processingFiles: List<KtFile> = testCase.project.allKotlinFiles().filter { file ->
+            file.declarations.find { it.isPrivate() && it.isResolvable } != null
+        }
+
+        processingFiles.forEach { file ->
+
+            val jvmKtFileParent =
+                VfsUtil.createDirectoryIfMissing(
+                    file.module!!.jvmMainSources.path + VfsUtil.VFS_SEPARATOR + file.packageToRelativePath()
+                )!!
+
+            val jvmKtFile = jvmKtFileParent.findOrCreateChildData(this, file.jvmFileNameMatchedWithCommon())
+                .toPsiFile(testCase.project) as KtFile
+
+            if (jvmKtFile.text.isEmpty()) {
+                /*
+                When inserted importList, it can be placed in next character position after package directive. Why? I don't know
+                Fixed by deleting package and import, and inserting again
+                 */
+
+                jvmKtFile.packageDirective?.delete()
+                jvmKtFile.importList?.delete()
+
+                file.packageDirective?.let { jvmKtFile.addWithEndedNL(it.copy(), 1) }
+                file.importList?.let { jvmKtFile.addWithEndedNL(it.copy(), 1) }
+            }
+
+            file.declarations.filter { it.isPrivate() && it.isResolvable }.forEach { jvmKtFile.addWithEndedNL(it.copy(), 1) }
+        }
+    }
 
     private fun moveAllFilesThatDependsOnJvmAndCantBeConvertedToCommon() {
 
@@ -99,22 +138,31 @@ class MppProjectConverter(
             processingFiles = testCase.project.allKotlinFilesWithDeclarationsThatShouldBeMovedToPlatformSrc()
 
             processingFiles.forEach { file ->
-                val processingDcls = file.allDeclarationsThatShouldBeMovedToPlatformSrc().map { it.copy() }
+                val processingDclsOriginal = file.allDeclarationsThatShouldBeMovedToPlatformSrc()
 
-                val jvmKtFileParent = VfsUtil.createDirectoryIfMissing(file.module!!.jvmMainSources.path + VfsUtil.VFS_SEPARATOR + file.packageToRelativePath())!!
+                val jvmKtFileParent = VfsUtil.createDirectoryIfMissing(
+                    file.module!!.jvmMainSources.path + VfsUtil.VFS_SEPARATOR + file.packageToRelativePath()
+                )!!
 
-                val jvmKtFileName = "${file.virtualFile.nameWithoutExtension}Jvm.${file.virtualFile.extension}"
-
-                val jvmKtFile = jvmKtFileParent.findOrCreateChildData(this, jvmKtFileName).toPsiFile(testCase.project) as KtFile
+                val jvmKtFile = jvmKtFileParent.findOrCreateChildData(this, file.jvmFileNameMatchedWithCommon())
+                    .toPsiFile(testCase.project) as KtFile
 
 
                 if (jvmKtFile.text.isEmpty()) {
-                    file.packageDirective?.let { jvmKtFile.addWithEndedNL(it, 1) }
-                    file.importList?.let { jvmKtFile.addWithEndedNL(it, 1) }
+                    /*
+                    When inserted importList, it can be placed in next character position after package directive. Why? I don't know
+                    Fixed by deleting package and import, and inserting again
+                     */
+
+                    jvmKtFile.packageDirective?.delete()
+                    jvmKtFile.importList?.delete()
+
+                    file.packageDirective?.let { jvmKtFile.addWithEndedNL(it.copy(), 1) }
+                    file.importList?.let { jvmKtFile.addWithEndedNL(it.copy(), 1) }
                 }
 
-                processingDcls.forEach { jvmKtFile.addWithEndedNL(it, 1) }
-                file.allDeclarationsThatShouldBeMovedToPlatformSrc().forEach { it.delete() }
+                processingDclsOriginal.forEach { jvmKtFile.addWithEndedNL(it.copy(), 1) }
+                processingDclsOriginal.forEach { it.delete() }
             }
 
 
@@ -122,6 +170,7 @@ class MppProjectConverter(
     }
 
     private fun processFiles() {
+        copyAllPrivateDeclarationsForPlatformDependentFiles()
         moveAllFilesThatDependsOnJvmAndCantBeConvertedToCommon()
 
         testCase.project.allKotlinFiles().filter { it.isInCommonSources() }.forEach { jvmKtFile ->
@@ -135,7 +184,7 @@ class MppProjectConverter(
                     override fun visitAnnotationEntry(annotationEntry: KtAnnotationEntry) {
                         super.visitAnnotationEntry(annotationEntry)
 
-                        annotationEntry.typeReference?.isNotResolvable()?.ifTrue { annotationEntry.delete() }
+                        annotationEntry.typeReference?.isNotResolvable?.ifTrue { annotationEntry.delete() }
                     }
                 })
 
@@ -144,9 +193,9 @@ class MppProjectConverter(
                 VfsUtil.createDirectoryIfMissing(jvmKtFile.module!!.commonMainSources.path + File.separator + jvmKtFile.packageToRelativePath())
                 jvmKtFile.virtualFile.move(this, jvmKtFile.module!!.commonMainSources.findFileByRelativePath(jvmKtFile.packageToRelativePath())!!)
             } else {
-                    // the file can be converted to expect/actual scheme
+                // the file can be converted to expect/actual scheme
 
-                    // only check to validity of resolving. Remove it after tests
+                // only check to validity of resolving. Remove it after tests
 //                    if (!jvmKtFile.isResolvableWithJvmAnalyzer) {
 //                        commitVirtualProjectFilesToPhysical()
 //                        error("file $jvmKtFile is not resolvable with jvm analyzer!")
@@ -158,19 +207,17 @@ class MppProjectConverter(
                     jvmKtFile.name,
 
                     jvmKtFile.module!!.jvmMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
-                    "${jvmKtFile.virtualFile.nameWithoutExtension}Jvm.${jvmKtFile.virtualFile.extension}",
+                    jvmKtFile.jvmFileNameMatchedWithCommon(),
 
                     jvmKtFile.module!!.jsMainSources.path + File.separator + jvmKtFile.packageToRelativePath(),
-                    "${jvmKtFile.virtualFile.nameWithoutExtension}Js.${jvmKtFile.virtualFile.extension}"
+                    jvmKtFile.jsFileNameMatchedWithCommon()
                 )
 
                 if (expectActualMaker.expectFile.declarations.isEmpty()) {
                     // all declarations must be in platform part. Then, remove expect file.
                     expectActualMaker.expectFile.virtualFile.delete(this)
                     expectActualMaker.actualFile.virtualFile.rename(
-                        this, expectActualMaker.actualFile.name.apply {
-                            dropLast("Jvm.kt".length) + ".kt"
-                        }
+                        this, expectActualMaker.actualFile.commonFileNameMatchedWithJvm()
                     )
                     expectActualMaker.actualTODOFile.virtualFile.delete(this)
                 }
@@ -224,6 +271,9 @@ class MppProjectConverter(
         }
     }
 
+    private fun KtFile.jvmFileNameMatchedWithCommon(): String = "${virtualFile.nameWithoutExtension}Jvm.${virtualFile.extension}"
+    private fun KtFile.jsFileNameMatchedWithCommon(): String = "${virtualFile.nameWithoutExtension}Js.${virtualFile.extension}"
+    private fun KtFile.commonFileNameMatchedWithJvm(): String = virtualFile.name.dropLast("Jvm.kt".length) + ".kt"
 
     private fun KtFile.isInCommonSources(): Boolean = module?.commonMainSources?.path?.let { return this.virtualFilePath.startsWith(it) } ?: false
 

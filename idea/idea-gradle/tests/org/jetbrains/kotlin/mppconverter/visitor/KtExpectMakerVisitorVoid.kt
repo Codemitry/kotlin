@@ -31,7 +31,7 @@ object KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
             if (property.typeReference == null) {
                 val factory = KtPsiFactory(property)
                 val type =
-                    property.resolveToDescriptorIfAny()?.type?.constructor?.declarationDescriptor?.fqNameSafe?.asString() /*property.initializer?.getType(context)?.toString() */
+                    property.resolveToDescriptorIfAny()?.type?.constructor?.declarationDescriptor?.fqNameSafe?.asString()
                         ?: error("type of variable is null!")
                 property.typeReference = factory.createType(type)
             }
@@ -128,7 +128,7 @@ object KtExpectMakerVisitorVoid : KtTreeVisitorVoid() {
     override fun visitAnnotationEntry(annotationEntry: KtAnnotationEntry) {
         super.visitAnnotationEntry(annotationEntry)
 
-        if (annotationEntry.isNotResolvable())
+        if (annotationEntry.isNotResolvable)
             annotationEntry.delete()
     }
 

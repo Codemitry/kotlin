@@ -96,3 +96,8 @@ fun KtElement.addWithEndedNL(elem: PsiElement, emptyLinesCount: Int = 0) {
     add(elem)
     add(KtPsiFactory(this).createNewLine(emptyLinesCount + 1))
 }
+
+fun KtElement.addBeforeWithEndedNL(elem: PsiElement, before: PsiElement, emptyLinesCount: Int = 0) {
+    addBefore(elem, before)
+    addBefore(KtPsiFactory(this).createNewLine(emptyLinesCount + 1), before)
+}

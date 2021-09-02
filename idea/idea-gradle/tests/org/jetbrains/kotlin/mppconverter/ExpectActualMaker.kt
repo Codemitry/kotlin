@@ -15,7 +15,6 @@ import org.jetbrains.kotlin.mppconverter.visitor.toActualWithTODOs
 import org.jetbrains.kotlin.mppconverter.visitor.toExpect
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 import java.io.File
 
 class ExpectActualMaker(val file: KtFile) {
@@ -57,22 +56,32 @@ class ExpectActualMaker(val file: KtFile) {
 
         file.packageDirective?.let {
             expectFile.addWithEndedNL(it, 1)
-            if (actualFile.packageDirective == null || actualFile.packageDirective?.text?.isEmpty() == true) actualFile.addWithEndedNL(it, 1)
+
+            actualFile.packageDirective?.delete()
+
+            if (actualFile.children.isNotEmpty())
+                actualFile.addBeforeWithEndedNL(it.copy(), actualFile.children[0], 1)
+            else
+                actualFile.addWithEndedNL(it.copy(), 1)
+
             actualTODOFile.addWithEndedNL(it, 1)
         }
         file.importList?.let {
             expectFile.addWithEndedNL(it, 1)
-            if (actualFile.importList == null || actualFile.importList?.text?.isEmpty() == true) actualFile.addWithEndedNL(it, 1)
+
+            actualFile.importList?.delete()
+
+            if (actualFile.children.isNotEmpty())
+                actualFile.addBeforeWithEndedNL(it.copy(), actualFile.children[0], 1)
+            else
+                actualFile.addWithEndedNL(it.copy(), 1)
+
             actualTODOFile.addWithEndedNL(it, 1)
         }
 
         file.declarations.forEach { dcl ->
             if (dcl.isResolvable) {
                 expectFile.addWithEndedNL(dcl.copy(), 1)
-                if (dcl.isPrivate()) {
-                    actualFile.addWithEndedNL(dcl.copy(), 1)
-                    actualTODOFile.addWithEndedNL(dcl.copy(), 1)
-                }
             } else {
                 if (dcl.isExpectizingAllowed()) {
                     expectFile.addWithEndedNL((dcl.copy() as KtDeclaration).toExpect(), 1)
