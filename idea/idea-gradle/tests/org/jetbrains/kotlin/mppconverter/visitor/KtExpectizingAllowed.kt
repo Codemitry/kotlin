@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.util.hasInlineModifier
 import org.jetbrains.kotlin.idea.util.hasPrivateModifier
 import org.jetbrains.kotlin.idea.util.ifTrue
+import org.jetbrains.kotlin.lexer.KtTokens.LATEINIT_KEYWORD
 import org.jetbrains.kotlin.lexer.KtTokens.VALUE_KEYWORD
 import org.jetbrains.kotlin.mppconverter.resolvers.acceptChildren
 import org.jetbrains.kotlin.mppconverter.resolvers.isNotResolvable
@@ -27,6 +28,9 @@ private object KtExpectizingCheckVisitor : KtVisitor<Boolean, Unit>() {
     override fun visitProperty(property: KtProperty, data: Unit): Boolean {
         property.typeReference?.isNotResolvable?.ifTrue { return false }
         property.typeParameterList?.isNotResolvable?.ifTrue { return false }
+
+        if (property.hasModifier(LATEINIT_KEYWORD)) return false
+
         return property.resolveToDescriptorIfAny()?.type?.isResolvable(property.project) == true
     }
 

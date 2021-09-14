@@ -146,6 +146,7 @@ fun KtFunction.isResolvableSignature(): Boolean {
     receiverTypeReference?.let { if (it.isNotResolvable) return false }
     valueParameters.forEach { if (it.isNotResolvable) return false }
     typeParameterList?.isNotResolvable?.ifTrue { return false }
+    typeConstraintList?.isNotResolvable?.ifTrue { return false }
     getReturnTypeReference()?.let { if (it.isNotResolvable) return false } // if return type declared explicitly
 
     return true
